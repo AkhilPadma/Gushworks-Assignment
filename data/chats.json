@@ -1,0 +1,155 @@
+[
+  {
+    "lead_id": "L001",
+    "messages": [
+      {"from": "rep", "date": "2026-10-13 10:15", "text": "Hi Rajesh, following up on your inquiry about our semi-automatic pouch filling machine. Attached the brochure."},
+      {"from": "buyer", "date": "2026-10-13 11:02", "text": "Thanks. Looks good. What's the price for a 50-pouch/min model with CE certification?"},
+      {"from": "rep", "date": "2026-10-13 11:30", "text": "The MPF-50C is quoted at Rs 8.5L ex-works. Delivery in 3 weeks."},
+      {"from": "buyer", "date": "2026-10-14 09:45", "text": "Can you send a formal quote on letterhead? We want to place order by end of month."}
+    ]
+  },
+  {
+    "lead_id": "L002",
+    "messages": [
+      {"from": "rep", "date": "2026-10-12 14:00", "text": "Hi Priya, met you at the Dairy Expo last week. Sharing our dairy pouch packaging catalogue as promised."},
+      {"from": "buyer", "date": "2026-10-12 15:20", "text": "Thanks. We're evaluating 2-3 vendors. Our volume is 10,000 pouches/day. What capacity do you recommend?"},
+      {"from": "rep", "date": "2026-10-12 16:00", "text": "For 10k/day I'd suggest the DP-120 model, 120 pouches/min. Happy to arrange a demo at our Pune facility."},
+      {"from": "buyer", "date": "2026-10-13 10:00", "text": "A demo would help. Let me check with my technical team and get back by Friday."}
+    ]
+  },
+  {
+    "lead_id": "L003",
+    "messages": [
+      {"from": "rep", "date": "2026-10-10 09:30", "text": "Hi Vikram, you filled our website form regarding spice packaging solutions. Can I understand your requirement?"},
+      {"from": "buyer", "date": "2026-10-10 10:15", "text": "Yes, we export turmeric and chili powder. Need vacuum packaging machine for 500g to 5kg pouches."},
+      {"from": "rep", "date": "2026-10-10 10:40", "text": "Our VP-500 handles 500g to 5kg range. I'll send specs and pricing today."},
+      {"from": "buyer", "date": "2026-10-12 11:00", "text": "Please do. Also mention if you have GST-inclusive pricing and installation support in Kerala."}
+    ]
+  },
+  {
+    "lead_id": "L004",
+    "messages": [
+      {"from": "rep", "date": "2026-10-08 11:00", "text": "Hi Anjali, Prakash from Reddy Industries referred you. Understand you need blister packaging for tablets?"},
+      {"from": "buyer", "date": "2026-10-08 11:45", "text": "Yes correct. We're setting up a new line, output 50,000 blisters/day. Budget around 15-20L."},
+      {"from": "rep", "date": "2026-10-08 14:00", "text": "Our BP-500 series fits that spec. I'll put together a proposal with GMP compliance details."},
+      {"from": "buyer", "date": "2026-10-10 09:00", "text": "Great. We also need to finalize vendor by Nov 15. Please share references of pharma clients using your machines."}
+    ]
+  },
+  {
+    "lead_id": "L005",
+    "messages": [
+      {"from": "rep", "date": "2026-10-07 10:00", "text": "Hi Sameer, following up on your WhatsApp inquiry about bottle labeling machines."},
+      {"from": "buyer", "date": "2026-10-07 12:30", "text": "Yes, we need wrap-around labeler for 500ml and 1L PET bottles. 60 bottles/min capacity."},
+      {"from": "rep", "date": "2026-10-07 13:00", "text": "I'll send our WL-60 specs. Lead time is 4 weeks currently."},
+      {"from": "buyer", "date": "2026-10-09 15:00", "text": "Okay send details. We're also talking to 2 other vendors so will take 2-3 weeks to decide."}
+    ]
+  },
+  {
+    "lead_id": "L006",
+    "messages": [
+      {"from": "rep", "date": "2026-10-11 10:00", "text": "Hi Deepa, sharing the chocolate wrapping machine quote - CW-80 at Rs 12L ex-works."},
+      {"from": "buyer", "date": "2026-10-11 12:00", "text": "The machine looks right but the price is on the higher side. Can we work out something around 10L?"},
+      {"from": "rep", "date": "2026-10-12 09:30", "text": "I can bring it down to 11.2L with standard warranty, or 10.5L if you take basic warranty only. Which works?"},
+      {"from": "buyer", "date": "2026-10-13 14:00", "text": "Let's go with 10.8L and standard warranty. Also need payment split 50-50, advance and on delivery. Can you confirm?"}
+    ]
+  },
+  {
+    "lead_id": "L007",
+    "messages": [
+      {"from": "rep", "date": "2026-10-03 15:00", "text": "Hi Arjun, from Pack Expo. Sharing details on our bottling line as discussed."},
+      {"from": "buyer", "date": "2026-10-03 16:00", "text": "Thanks. Will review and share with my team."},
+      {"from": "rep", "date": "2026-10-05 10:00", "text": "Hi Arjun, any initial thoughts? Happy to clarify any questions."}
+    ]
+  },
+  {
+    "lead_id": "L008",
+    "messages": [
+      {"from": "rep", "date": "2026-10-02 11:00", "text": "Hi Meera, received your website inquiry about herbal powder packaging. What's your target output?"},
+      {"from": "buyer", "date": "2026-10-02 14:00", "text": "Need to pack churna powders in 100g and 250g sachets. Around 5000 sachets/day initially."}
+    ]
+  },
+  {
+    "lead_id": "L009",
+    "messages": [
+      {"from": "rep", "date": "2026-09-28 11:30", "text": "Hi Rakesh, cold outreach - we provide grain processing packaging solutions. Would it be useful to connect?"},
+      {"from": "buyer", "date": "2026-09-28 14:00", "text": "We already have a vendor but open to alternatives. Send me a brochure."},
+      {"from": "rep", "date": "2026-09-28 15:00", "text": "Sent. Let me know if you'd like a call to discuss."}
+    ]
+  },
+  {
+    "lead_id": "L010",
+    "messages": [
+      {"from": "rep", "date": "2026-09-25 10:00", "text": "Hi Sunita, Vikas from Lotus Beauty referred me. Heard you're expanding your cosmetics line - sharing our tube filling machine details."},
+      {"from": "buyer", "date": "2026-09-25 11:30", "text": "Yes we're adding a new SKU - face serums in 30ml tubes. Will go through the details and come back."}
+    ]
+  },
+  {
+    "lead_id": "L011",
+    "messages": [
+      {"from": "rep", "date": "2026-10-10 11:00", "text": "Hi Harish, sharing details on our pickle jar filling + capping line - PJ-40 model."},
+      {"from": "buyer", "date": "2026-10-10 13:30", "text": "Need details on power consumption, machine footprint, and whether it handles both glass and PET jars. Also what's the changeover time between SKUs?"},
+      {"from": "rep", "date": "2026-10-10 15:00", "text": "Great questions. Power 3kW, footprint 2.4m x 1.8m, handles both glass and PET with changeover kit. Full changeover ~45 min. I'll send the technical datasheet."},
+      {"from": "buyer", "date": "2026-10-11 10:00", "text": "Datasheet received. Can we schedule a technical call with your engineer? Want to understand after-sales service and spare parts availability in Nashik."}
+    ]
+  },
+  {
+    "lead_id": "L012",
+    "messages": [
+      {"from": "rep", "date": "2026-09-22 13:00", "text": "Hi Lakshmi, from the trade show. Sharing details on our snack packaging line as requested."},
+      {"from": "buyer", "date": "2026-09-22 16:00", "text": "Thanks. I'll go through."},
+      {"from": "rep", "date": "2026-09-25 11:00", "text": "Hi Lakshmi, any thoughts? Happy to arrange a facility visit."},
+      {"from": "rep", "date": "2026-09-30 10:00", "text": "Hi Lakshmi, following up again. Please let me know if there's interest."}
+    ]
+  },
+  {
+    "lead_id": "L013",
+    "messages": [
+      {"from": "rep", "date": "2026-10-06 10:00", "text": "Hi Nitin, sharing the quote for the oil pouch filling line - OP-100 at Rs 18L."},
+      {"from": "buyer", "date": "2026-10-07 11:00", "text": "Honestly the price is way above our budget. We were looking at 10-12L range max."},
+      {"from": "rep", "date": "2026-10-08 09:00", "text": "I hear you. The OP-100 is our premium line. We have the OP-60 at Rs 11L which handles lower volumes but same quality - would that fit?"},
+      {"from": "buyer", "date": "2026-10-08 14:00", "text": "Send me the OP-60 spec sheet. If it fits our volume needs, this could work."}
+    ]
+  },
+  {
+    "lead_id": "L016",
+    "messages": [
+      {"from": "rep", "date": "2026-09-10 10:00", "text": "Hi Pooja, following up from the Tea Expo. Sharing our tea packaging solutions."},
+      {"from": "buyer", "date": "2026-09-10 11:00", "text": "Thanks. We're not actively looking right now, maybe next quarter after our new facility opens."},
+      {"from": "rep", "date": "2026-09-15 09:00", "text": "Understood Pooja. I'll check back in January as suggested."}
+    ]
+  },
+  {
+    "lead_id": "L019",
+    "messages": [
+      {"from": "rep", "date": "2026-08-28 14:00", "text": "Hi Suresh, you filled our form about flour packaging automation."},
+      {"from": "buyer", "date": "2026-08-28 16:00", "text": "Just exploring options. Will reach out when we're ready."},
+      {"from": "rep", "date": "2026-09-05 10:00", "text": "Hi Suresh, any update?"},
+      {"from": "rep", "date": "2026-09-15 11:00", "text": "Hi Suresh, checking in once more. Let me know when you want to resume."}
+    ]
+  },
+  {
+    "lead_id": "L022",
+    "messages": [
+      {"from": "rep", "date": "2026-10-05 10:00", "text": "Hi Shilpa, following up on your WhatsApp inquiry about dry fruit packaging."},
+      {"from": "buyer", "date": "2026-10-05 12:00", "text": "Yes, we need vacuum sealing for cashews and almonds. 250g, 500g and 1kg packs."},
+      {"from": "rep", "date": "2026-10-06 09:30", "text": "Our VS-100 handles all three pack sizes. Sending quote today."}
+    ]
+  },
+  {
+    "lead_id": "L023",
+    "messages": [
+      {"from": "rep", "date": "2026-10-04 11:00", "text": "Hi Prakash, Ravi from Nair Cashews referred me. Understand you need vacuum packaging for cashew exports?"},
+      {"from": "buyer", "date": "2026-10-04 14:30", "text": "Yes, exporting to Middle East. Need USFDA-compliant machine, 100g to 1kg packs, around 2000 packs/day."},
+      {"from": "rep", "date": "2026-10-04 15:00", "text": "Our VP-200X is USFDA certified and handles that range. I'll send specs and schedule a call."},
+      {"from": "buyer", "date": "2026-10-04 17:00", "text": "Perfect. Also need to know about export documentation support and training for our operators."}
+    ]
+  },
+  {
+    "lead_id": "L024",
+    "messages": [
+      {"from": "rep", "date": "2026-09-30 13:00", "text": "Hi Ritu, met you at the Namkeen Expo. Sharing our snack filling line details."},
+      {"from": "buyer", "date": "2026-09-30 15:00", "text": "Thanks. Will circulate internally."},
+      {"from": "rep", "date": "2026-10-05 10:00", "text": "Hi Ritu, following up - any thoughts from your team?"}
+    ]
+  }
+]

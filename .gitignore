@@ -1,0 +1,25 @@
+# Virtual env
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Secrets - NEVER commit API keys
+.streamlit/secrets.toml
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp dev scripts
+list_models.py
+fix_missing.py
+fix_remaining.py
+fix_all_errors.py
+
+# NOTE: app.db IS committed (pre-cached analysis for instant demo load)
