@@ -9,6 +9,7 @@ the prompt encodes. The output format is identical either way.
 
 import json
 import os
+import sys
 import time
 from datetime import datetime, timedelta
 from groq import Groq
@@ -42,18 +43,21 @@ Your job: for each lead, read the information provided and output a strict JSON 
 
 PRIORITY RULE — UNTOUCHED INBOUND LEADS (DROPPED-BALL):
 If a lead has NO chat history AND the source is buyer-initiated (Website Form, WhatsApp Inquiry, Trade Show, Referral), the buyer reached out and the rep NEVER replied. Failure is on our side. Never tag these as Cold.
-- Untouched inbound within 14 days -> HOT (urgent recovery)
-- Untouched inbound 14-60 days old -> WARM (dropped ball, salvage with apology)
-- Untouched inbound >60 days old -> WARM but low priority
+- Untouched inbound within 0-2 days -> HOT (fresh, no apology needed — just prompt first-touch)
+- Untouched inbound 3-14 days -> HOT (urgent recovery, brief apology for delay)
+- Untouched inbound 14-60 days -> WARM (dropped ball, salvage with apology)
+- Untouched inbound >60 days -> WARM but low priority
 
 For rep-initiated sources (LinkedIn, Cold Call) with no chat and no response:
 - <30 days -> WARM
 - >30 days -> COLD
 
-Draft for untouched inbound MUST acknowledge the delay briefly ("apologies for the delay getting back"), then propose a call or share value.
+Draft for untouched inbound:
+- 0-2 days old -> NO apology ("thanks for reaching out", "glad you got in touch")
+- 3+ days -> brief delay acknowledgment ("apologies for the delay")
 
 TAGGING RULES (when chat history EXISTS):
-- HOT: Buyer shows clear buying signals - formal quote request, price negotiation, demo agreed, budget or deadline mentioned, deep technical questions.
+- HOT: Buyer shows clear buying signals - formal quote request, price negotiation, demo agreed, budget or deadline mentioned, deep technical questions, asking for specs/details.
 - WARM: Interested but not ready - comparing vendors, asked for brochure, short vague responses.
 - COLD: Rep sent follow-ups, buyer did not reply, >14 days passed. OR buyer said "not interested" or "maybe next quarter."
 
@@ -90,7 +94,8 @@ Return ONLY a valid JSON object. No markdown, no code fences.
 BUYING_SIGNAL_WORDS = [
     "quote", "price", "cost", "budget", "deadline", "order", "purchase",
     "deliver", "when can you", "references", "demo", "letter", "formal",
-    "negotiate", "discount", "payment", "warranty", "specification", "specs"
+    "negotiate", "discount", "payment", "warranty", "specification", "specs",
+    "spec", "detail", "catalog", "brochure", "urgent", "urgently"
 ]
 
 COLD_SIGNAL_PHRASES = [
@@ -131,11 +136,22 @@ def _rule_based_analysis(lead: dict, chat: list | None, today: str) -> dict:
     # ===== CASE 1: No chat history =====
     if not chat:
         if source in buyer_initiated_sources:
+            # Fresh (0-2 days) — no apology
+            if days_old <= 2:
+                return {
+                    "tag": "Hot",
+                    "reason": f"Fresh {source.lower()} inquiry — needs first-touch today.",
+                    "next_followup_date": today,
+                    "draft_message": (
+                        f"Hi {name}, thanks for reaching out via {source.lower()}. "
+                        f"Can we set up a quick call today to discuss your packaging needs? —"
+                    ),
+                }
             # Dropped-ball logic
             if days_old <= 14:
                 return {
                     "tag": "Hot",
-                    "reason": f"Buyer reached out via {source.lower()}, no reply sent — urgent first-touch needed.",
+                    "reason": f"Buyer reached out via {source.lower()} {days_old} days ago, no reply yet — urgent.",
                     "next_followup_date": today,
                     "draft_message": (
                         f"Hi {name}, apologies for the delay getting back on your {source.lower()} inquiry. "
@@ -230,6 +246,18 @@ def _rule_based_analysis(lead: dict, chat: list | None, today: str) -> dict:
 
     # Buyer sent last → we might owe a reply
     if last_from == "buyer":
+        # Check for specific asks in the latest message
+        specific_asks = ["spec", "detail", "quote", "price", "catalog", "brochure", "send me"]
+        if any(ask in last_text for ask in specific_asks):
+            return {
+                "tag": "Hot",
+                "reason": "Buyer asking for specific info — needs quick response.",
+                "next_followup_date": today,
+                "draft_message": (
+                    f"Hi {name}, thanks for the specifics. "
+                    f"Sharing the details you asked for shortly — expect them today. —"
+                ),
+            }
         if buying_signal_count >= 2:
             return {
                 "tag": "Hot",
@@ -320,10 +348,14 @@ def analyze_lead(lead: dict, chat: list | None, today: str) -> dict:
 
     Guarantees a valid result — user never sees "agent error".
     """
+    # Debug logging — visible in Streamlit Cloud logs
+    print(f"[AGENT] Called for lead {lead.get('name')} at {today}", file=sys.stderr)
+
     try:
         client = get_groq_client()
-    except Exception:
-        # No API key — fall straight to rules
+        print(f"[AGENT] Groq client created OK", file=sys.stderr)
+    except Exception as e:
+        print(f"[AGENT] Groq client FAILED: {e}", file=sys.stderr)
         return _rule_based_analysis(lead, chat, today)
 
     # Build user message
@@ -355,17 +387,22 @@ Analyze this lead and return the JSON object."""
     for model_name in models:
         for attempt in range(2):
             try:
+                print(f"[AGENT] Trying {model_name} attempt {attempt+1}", file=sys.stderr)
                 raw = _call_groq(client, model_name, user_message)
+                print(f"[AGENT] {model_name} SUCCESS, got {len(raw)} chars", file=sys.stderr)
                 result = _parse_json(raw)
                 return _validate(result)
             except Exception as e:
                 err_str = str(e)
+                print(f"[AGENT] {model_name} FAILED: {err_str[:200]}", file=sys.stderr)
                 if "429" in err_str and attempt == 0:
+                    print(f"[AGENT] Rate limited, sleeping 6s", file=sys.stderr)
                     time.sleep(6)
                     continue
                 break  # try next model
 
     # All LLM attempts failed — rule-based fallback (always succeeds)
+    print(f"[AGENT] All LLM attempts failed, using rule-based fallback", file=sys.stderr)
     return _rule_based_analysis(lead, chat, today)
 
 
