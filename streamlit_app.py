@@ -94,7 +94,7 @@ all_leads = db.get_all_leads()
 results = db.get_all_agent_results()
 today_display = datetime.now().strftime("%A, %d %b %Y")
 
-col_a, col_b, col_c, col_d = st.columns([3, 1.3, 1.3, 1])
+col_a, col_b, col_c = st.columns([3, 1.5, 1.5])
 with col_a:
     st.title("📦 PackPro Lead Follow-Up")
     st.caption(f"5 sales reps · {len(all_leads)} total leads · {today_display}")
@@ -142,14 +142,6 @@ with col_c:
                     analyze_one(new_id)
                     st.success(f"Added {new_name}.")
                     st.rerun()
-with col_d:
-    st.write("")
-    with st.popover("🔄 Re-run", use_container_width=True):
-        st.caption("Re-analyzes ALL leads from scratch. Takes ~2 min due to API rate limits.")
-        if st.button("Yes, re-run all", type="primary", key="confirm_reanalyze"):
-            n = analyze_all_leads(force=True)
-            st.success(f"Re-analyzed {n} leads.")
-            st.rerun()
 
 
 # First-time guard — auto-run if cache empty
@@ -246,7 +238,6 @@ def render_bucket(title: str, rows: list, empty_msg: str):
             with c3:
                 if st.button("Open", key=f"open_{row['lead_id']}", use_container_width=True):
                     st.session_state["selected_lead"] = row["lead_id"]
-                    # Clear any reply-mode state from previous lead
                     for k in list(st.session_state.keys()):
                         if k.startswith("reply_mode_") or k.startswith("reply_text_"):
                             del st.session_state[k]
@@ -262,7 +253,6 @@ if "selected_lead" in st.session_state and st.session_state["selected_lead"]:
     result = db.get_agent_result(lid)
     chat = db.get_chat(lid)
 
-    # Sticky back + title
     header_col1, header_col2 = st.columns([1, 5])
     with header_col1:
         if st.button("← Back", key="back_top", use_container_width=True):
@@ -273,7 +263,6 @@ if "selected_lead" in st.session_state and st.session_state["selected_lead"]:
             f"### {TAG_EMOJI.get(result['tag'], '•')} {lead['name']} — {lead['company']}"
         )
 
-    # Meta — phone as tel: link
     phone_raw = lead['phone']
     phone_clean = re.sub(r'[^\d+]', '', phone_raw) if phone_raw else ""
     phone_html = (
@@ -288,7 +277,6 @@ if "selected_lead" in st.session_state and st.session_state["selected_lead"]:
     m4.markdown(f"**Last contact**  \n{lead['last_contact_date']}")
     m5.markdown(f"**Follow-up**  \n{result['next_followup_date']}")
 
-    # Tag banner
     st.markdown(
         f"<div style='background:{TAG_BG[result['tag']]};"
         f"border-left:4px solid {TAG_COLOR[result['tag']]};"
@@ -301,7 +289,6 @@ if "selected_lead" in st.session_state and st.session_state["selected_lead"]:
 
     st.write("")
 
-    # Two columns: chat on left, unified reply panel on right
     left, right = st.columns([1, 1])
 
     with left:
@@ -330,7 +317,6 @@ if "selected_lead" in st.session_state and st.session_state["selected_lead"]:
     with right:
         st.markdown("#### ✉️ Reply")
 
-        # Mode toggle — resets textarea on change
         mode_key = f"reply_mode_{lid}"
         if mode_key not in st.session_state:
             st.session_state[mode_key] = "I'm the rep"
@@ -346,7 +332,6 @@ if "selected_lead" in st.session_state and st.session_state["selected_lead"]:
         rep_name = lead.get("assigned_rep", "the team")
 
         if mode == "I'm the rep":
-            # Show AI draft, editable
             draft_display = resolve_rep_in_draft(result["draft_message"], rep_name)
             analyzed_at = result.get("analyzed_at", "")
 
@@ -381,7 +366,7 @@ if "selected_lead" in st.session_state and st.session_state["selected_lead"]:
                 analyze_one(lid)
                 st.rerun()
 
-        else:  # I'm the buyer
+        else:
             buyer_text = st.text_area(
                 "Type the buyer's message",
                 value="",
@@ -402,7 +387,6 @@ if "selected_lead" in st.session_state and st.session_state["selected_lead"]:
                     st.warning("Message cannot be empty.")
 
 else:
-    # Main list view
     st.markdown(f"#### 👤 {rep_view_label}")
 
     render_bucket("🔴 Overdue", overdue, "Nothing overdue. Good state.")
