@@ -255,9 +255,9 @@ if "selected_lead" in st.session_state and st.session_state["selected_lead"]:
     result = db.get_agent_result(lid)
     chat = db.get_chat(lid)
 
-    header_col1, header_col2 = st.columns([1, 5])
+    header_col1, header_col2 = st.columns([0.8, 6])
     with header_col1:
-        if st.button("← Back", key="back_top", use_container_width=True):
+        if st.button("← Back to List", key="back_top"):
             st.session_state["selected_lead"] = None
             st.rerun()
     with header_col2:
