@@ -256,13 +256,18 @@ if "selected_lead" in st.session_state and st.session_state["selected_lead"]:
     chat = db.get_chat(lid)
 
     header_col1, header_col2 = st.columns([0.8, 6])
-    with header_col1:
-        if st.button("← Back to List", key="back_top"):
+        # Back button + lead name on one line
+    bcol, ncol = st.columns([0.1, 0.9])
+    with bcol:
+        if st.button("←", key="back_top", help="Back to list"):
             st.session_state["selected_lead"] = None
             st.rerun()
-    with header_col2:
+    with ncol:
         st.markdown(
-            f"### {TAG_EMOJI.get(result['tag'], '•')} {lead['name']} — {lead['company']}"
+            f"<h3 style='margin:0;padding-top:4px'>"
+            f"{TAG_EMOJI.get(result['tag'], '•')} {lead['name']} — {lead['company']}"
+            f"</h3>",
+            unsafe_allow_html=True,
         )
 
     phone_raw = lead['phone']
