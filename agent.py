@@ -63,7 +63,7 @@ TAGGING RULES (when chat history EXISTS):
 HARD OPT-OUT DETECTION (HIGHEST PRIORITY):
 If buyer says "do not contact", "don't contact", "unsubscribe", "remove me", "stop contacting", "please stop", "no further contact", or any clear opt-out:
 - Tag: COLD
-- next_followup_date: EXACTLY 180 days from today (effectively archive — NEVER today or near-term)
+- next_followup_date: EXACTLY 180 days from today (effectively archive)
 - Reason: "Buyer explicitly opted out — suppressed from active queue."
 - Draft: brief acknowledgment ONLY, e.g. "Understood — we'll remove you from our list. Reach out anytime if that changes. —"
 - NEVER schedule a near-term follow-up for an opted-out lead. This overrides all other rules.
@@ -73,14 +73,28 @@ PRIORITY OVERRIDE RULES (apply BEFORE date rules, AFTER opt-out check):
 2. If the LATEST message is from BUYER and >1 day has passed with no rep response -> follow-up TODAY. Buyer is waiting.
 3. If a recent BUYER message contradicts an earlier timeline (e.g., earlier "next quarter" but recent "ready to buy") -> trust the RECENT message.
 
-FOLLOW-UP DATE RULES (today's date is provided):
+FOLLOW-UP DATE RULES (today's date is provided at top of user message):
 - HOT with urgency -> TODAY or TOMORROW
 - HOT without urgency -> 2-3 days
 - WARM -> 5-7 days
 - WARM where buyer said "will decide in X weeks" -> end of that window
-- COLD who said "maybe next quarter" -> START OF NEXT QUARTER (e.g. Jan 15 for Q1)
-- COLD without stated timeline -> 30-45 days
-- COLD opt-out -> 180 days
+
+COLD TIMELINE PARSING (STRICT — do not approximate):
+- "next quarter": compute the START of the NEXT CALENDAR QUARTER after today, use the 15th of that month:
+  * If today is Jan/Feb/Mar -> April 15 of same year
+  * If today is Apr/May/Jun -> July 15 of same year
+  * If today is Jul/Aug/Sep -> October 15 of same year
+  * If today is Oct/Nov/Dec -> January 15 of NEXT YEAR
+- "Q1" -> January 15 of relevant year
+- "Q2" -> April 15 of relevant year
+- "Q3" -> July 15 of relevant year
+- "Q4" -> October 15 of relevant year
+- "next year" -> January 15 of NEXT YEAR
+- "January" or any specific month -> 15th of that month (next occurrence)
+- "in [N] months" -> today + (N * 30) days
+- "after [event] opens/launches/completes" + a timeline hint -> use the timeline hint
+- COLD without stated timeline -> today + 30-45 days
+- COLD opt-out -> today + 180 days
 - UNTOUCHED inbound -> TODAY
 
 REP DELAY DETECTION:
@@ -138,7 +152,7 @@ BUYING_SIGNAL_WORDS = [
 
 COLD_SIGNAL_PHRASES = [
     "not interested", "maybe later", "not now", "next quarter",
-    "will reach out when", "just exploring", "already have"
+    "will reach out when", "just exploring", "already have", "next year"
 ]
 
 HARD_OPT_OUT = [
@@ -166,6 +180,67 @@ def _days_between(date_str: str, today: str) -> int:
 def _format_date(today: str, days_ahead: int) -> str:
     d = datetime.strptime(today, "%Y-%m-%d").date() + timedelta(days=days_ahead)
     return d.strftime("%Y-%m-%d")
+
+
+def _parse_cold_timeline(buyer_text: str, today: str) -> str:
+    """
+    Parse buyer's stated timeline from text and return a target follow-up date.
+    Returns YYYY-MM-DD string.
+    """
+    text = buyer_text.lower()
+    today_date = datetime.strptime(today, "%Y-%m-%d").date()
+    y = today_date.year
+    m = today_date.month
+
+    # "next quarter" → start of next calendar quarter, 15th
+    if "next quarter" in text:
+        if m <= 3:
+            return datetime(y, 4, 15).strftime("%Y-%m-%d")
+        elif m <= 6:
+            return datetime(y, 7, 15).strftime("%Y-%m-%d")
+        elif m <= 9:
+            return datetime(y, 10, 15).strftime("%Y-%m-%d")
+        else:  # Oct-Dec → next year Q1
+            return datetime(y + 1, 1, 15).strftime("%Y-%m-%d")
+
+    # Explicit quarters
+    if "q1" in text:
+        target_year = y + 1 if m >= 1 else y
+        return datetime(target_year, 1, 15).strftime("%Y-%m-%d")
+    if "q2" in text:
+        target_year = y + 1 if m >= 4 else y
+        return datetime(target_year, 4, 15).strftime("%Y-%m-%d")
+    if "q3" in text:
+        target_year = y + 1 if m >= 7 else y
+        return datetime(target_year, 7, 15).strftime("%Y-%m-%d")
+    if "q4" in text:
+        target_year = y + 1 if m >= 10 else y
+        return datetime(target_year, 10, 15).strftime("%Y-%m-%d")
+
+    # "next year"
+    if "next year" in text:
+        return datetime(y + 1, 1, 15).strftime("%Y-%m-%d")
+
+    # Specific month mentions
+    months = {
+        "january": 1, "february": 2, "march": 3, "april": 4,
+        "may": 5, "june": 6, "july": 7, "august": 8,
+        "september": 9, "october": 10, "november": 11, "december": 12
+    }
+    for month_name, month_num in months.items():
+        if month_name in text:
+            target_year = y if month_num > m else y + 1
+            return datetime(target_year, month_num, 15).strftime("%Y-%m-%d")
+
+    # "in N months"
+    import re
+    match = re.search(r"in (\d+)\s*month", text)
+    if match:
+        n = int(match.group(1))
+        return _format_date(today, n * 30)
+
+    # Default cold
+    return _format_date(today, 45)
 
 
 def _rule_based_analysis(lead: dict, chat: list | None, today: str) -> dict:
@@ -255,7 +330,7 @@ def _rule_based_analysis(lead: dict, chat: list | None, today: str) -> dict:
         if word in m.get("text", "").lower()
     )
 
-    # PRIORITY 1: Hard opt-out — overrides everything
+    # PRIORITY 1: Hard opt-out
     for m in buyer_msgs:
         text = m.get("text", "").lower()
         if any(phrase in text for phrase in HARD_OPT_OUT):
@@ -269,15 +344,16 @@ def _rule_based_analysis(lead: dict, chat: list | None, today: str) -> dict:
                 ),
             }
 
-    # PRIORITY 2: Soft cold signals
+    # PRIORITY 2: Soft cold signals — parse timeline from buyer text
     for m in buyer_msgs:
         text = m.get("text", "").lower()
         for phrase in COLD_SIGNAL_PHRASES:
             if phrase in text:
+                target_date = _parse_cold_timeline(text, today)
                 return {
                     "tag": "Cold",
-                    "reason": f"Buyer indicated '{phrase}' — respect timeline, follow up later.",
-                    "next_followup_date": _format_date(today, 45),
+                    "reason": f"Buyer indicated '{phrase}' — respecting their stated timeline.",
+                    "next_followup_date": target_date,
                     "draft_message": (
                         f"Hi {name}, no rush — reaching out as discussed earlier. "
                         f"Let me know when timing is better. —"
