@@ -80,6 +80,18 @@ If rep promised ("I'll send today") and failed, draft MUST acknowledge delay ("a
 NEGOTIATION DETECTION:
 If buyer proposes a NEW combination the rep did NOT offer, treat as COUNTER-OFFER. Draft says "let me check and confirm by [time]" — never "thanks for confirming X." Tag HOT.
 
+DISCOUNT & COMMITMENT RULES (CRITICAL):
+- You are the REP's assistant, not the company owner. You CANNOT approve discounts, special pricing, or non-standard terms on your own.
+- If buyer asks for ANY discount, special payment terms, custom specs, or extended warranty: draft MUST say "let me check with my manager and confirm by [specific date]" — NEVER agree on the spot.
+- If buyer counter-offers a price (e.g., "can you do 10L instead of 12L?"): treat as COUNTER-OFFER. Draft acknowledges the ask, promises to check internally, gives a timeframe (24-48 hours). Tag HOT.
+- NEVER draft messages that commit to:
+  * A specific discount percentage not already offered by the rep in chat
+  * A specific price lower than what rep already quoted
+  * Free add-ons, extended warranty, or bundled services the rep did not already offer
+  * Payment terms beyond standard (standard = 50% advance, 50% on delivery)
+- If buyer asks "any more discount?" after rep already gave one, draft MUST say: "that's the best I can offer right now, but let me double-check with my manager and get back by [date]." — NEVER escalate the discount further.
+- If buyer accepts an offer the rep made, draft can confirm. But if buyer counters with a DIFFERENT price/term, draft must defer to manager.
+
 DATE SANITY RULES:
 - Any delivery date, meeting date, or call time you propose MUST be today or later. Never suggest past dates.
 - If buyer asked when something can be delivered, propose a realistic FUTURE date (e.g., "in 5-7 business days" or "by [specific date in the future]").
@@ -112,6 +124,12 @@ COLD_SIGNAL_PHRASES = [
     "will reach out when", "just exploring", "already have"
 ]
 
+DISCOUNT_WORDS = [
+    "discount", "cheaper", "lower price", "better rate", "reduce",
+    "negotiate", "best price", "any more", "further", "concession",
+    "bring it down", "come down", "reduce the price", "lesser price"
+]
+
 
 def _days_between(date_str: str, today: str) -> int:
     """Return days between date_str and today. Positive if date_str is older."""
@@ -140,7 +158,6 @@ def _rule_based_analysis(lead: dict, chat: list | None, today: str) -> dict:
     days_old = _days_between(last_contact, today)
 
     buyer_initiated_sources = {"WhatsApp Inquiry", "Website Form", "Trade Show", "Referral"}
-    rep_initiated_sources = {"LinkedIn", "Cold Call"}
 
     # ===== CASE 1: No chat history =====
     if not chat:
@@ -254,7 +271,19 @@ def _rule_based_analysis(lead: dict, chat: list | None, today: str) -> dict:
 
     # Buyer sent last → we might owe a reply
     if last_from == "buyer":
-        # Priority override: buyer asked a question
+        # PRIORITY 1: Discount / negotiation request — defer to manager
+        if any(w in last_text for w in DISCOUNT_WORDS):
+            return {
+                "tag": "Hot",
+                "reason": "Buyer negotiating on price — needs manager approval, not on-spot agreement.",
+                "next_followup_date": today,
+                "draft_message": (
+                    f"Hi {name}, I hear you on the pricing. "
+                    f"Let me check with my manager on what's possible and confirm by tomorrow. —"
+                ),
+            }
+
+        # PRIORITY 2: Buyer asked a question
         is_question = "?" in last_text or any(
             w in last_text for w in ["what", "when", "how much", "can you", "could you", "how long"]
         )
@@ -269,7 +298,7 @@ def _rule_based_analysis(lead: dict, chat: list | None, today: str) -> dict:
                 ),
             }
 
-        # Specific asks
+        # PRIORITY 3: Specific info asks
         specific_asks = ["spec", "detail", "quote", "price", "catalog", "brochure", "send me"]
         if any(ask in last_text for ask in specific_asks):
             return {
@@ -281,6 +310,7 @@ def _rule_based_analysis(lead: dict, chat: list | None, today: str) -> dict:
                     f"Sharing the details you asked for shortly — expect them today. —"
                 ),
             }
+
         if buying_signal_count >= 2:
             return {
                 "tag": "Hot",
