@@ -4,7 +4,7 @@ Main UI: rep-centric view, buckets, detail view with unified reply panel.
 """
 
 import streamlit as st
-from datetime import datetime, date
+from datetime import datetime, date, timezone, timedelta
 import re
 
 import db
@@ -25,6 +25,8 @@ db.seed_if_empty()
 
 
 # Constants
+IST = timezone(timedelta(hours=5, minutes=30))
+
 TAG_EMOJI = {"Hot": "🔥", "Warm": "☀️", "Cold": "❄️"}
 TAG_COLOR = {"Hot": "#dc2626", "Warm": "#f59e0b", "Cold": "#64748b"}
 TAG_BG = {"Hot": "#fef2f2", "Warm": "#fffbeb", "Cold": "#f1f5f9"}
@@ -36,7 +38,7 @@ if "selected_rep" not in st.session_state:
 
 
 def today_str():
-    return datetime.now().strftime("%Y-%m-%d")
+    return datetime.now(IST).strftime("%Y-%m-%d")
 
 
 def days_from_today(d_str: str) -> int:
@@ -44,7 +46,7 @@ def days_from_today(d_str: str) -> int:
         d = datetime.strptime(d_str, "%Y-%m-%d").date()
     except (ValueError, TypeError):
         return 999
-    return (d - date.today()).days
+    return (d - datetime.now(IST).date()).days
 
 
 def resolve_rep_in_draft(draft: str, rep_name: str) -> str:
@@ -92,7 +94,7 @@ def analyze_one(lead_id: str):
 # ---------------------------------------------------------------------------
 all_leads = db.get_all_leads()
 results = db.get_all_agent_results()
-today_display = datetime.now().strftime("%A, %d %b %Y")
+today_display = datetime.now(IST).strftime("%A, %d %b %Y")
 
 col_a, col_b, col_c = st.columns([3, 1.5, 1.5])
 with col_a:
@@ -121,7 +123,7 @@ with col_c:
                 ["WhatsApp Inquiry", "Trade Show", "Website Form", "Referral", "LinkedIn", "Cold Call"]
             )
             new_rep = st.selectbox("Assign to rep", REPS)
-            new_date = st.date_input("Last contact date", value=date.today())
+            new_date = st.date_input("Last contact date", value=datetime.now(IST).date())
             new_buyer_msg = st.text_area(
                 "Buyer's first message (optional)",
                 placeholder="Paste the WhatsApp text, form submission, or trade-show note here.",
