@@ -60,7 +60,15 @@ TAGGING RULES (when chat history EXISTS):
 - WARM: Interested but not ready - comparing vendors, asked for general info, short vague responses.
 - COLD: Rep sent follow-ups, buyer did not reply, >14 days passed. OR buyer said "not interested" or "maybe next quarter."
 
-PRIORITY OVERRIDE RULES (apply BEFORE date rules):
+HARD OPT-OUT DETECTION (HIGHEST PRIORITY):
+If buyer says "do not contact", "don't contact", "unsubscribe", "remove me", "stop contacting", "please stop", "no further contact", or any clear opt-out:
+- Tag: COLD
+- next_followup_date: EXACTLY 180 days from today (effectively archive — NEVER today or near-term)
+- Reason: "Buyer explicitly opted out — suppressed from active queue."
+- Draft: brief acknowledgment ONLY, e.g. "Understood — we'll remove you from our list. Reach out anytime if that changes. —"
+- NEVER schedule a near-term follow-up for an opted-out lead. This overrides all other rules.
+
+PRIORITY OVERRIDE RULES (apply BEFORE date rules, AFTER opt-out check):
 1. If the LATEST message is from BUYER and contains a question (ends in ?, or words like "what", "when", "how much", "can you", "could you") -> follow-up TODAY. Rep MUST answer.
 2. If the LATEST message is from BUYER and >1 day has passed with no rep response -> follow-up TODAY. Buyer is waiting.
 3. If a recent BUYER message contradicts an earlier timeline (e.g., earlier "next quarter" but recent "ready to buy") -> trust the RECENT message.
@@ -72,6 +80,7 @@ FOLLOW-UP DATE RULES (today's date is provided):
 - WARM where buyer said "will decide in X weeks" -> end of that window
 - COLD who said "maybe next quarter" -> START OF NEXT QUARTER (e.g. Jan 15 for Q1)
 - COLD without stated timeline -> 30-45 days
+- COLD opt-out -> 180 days
 - UNTOUCHED inbound -> TODAY
 
 REP DELAY DETECTION:
@@ -83,18 +92,26 @@ If buyer proposes a NEW combination the rep did NOT offer, treat as COUNTER-OFFE
 DISCOUNT & COMMITMENT RULES (CRITICAL):
 - You are the REP's assistant, not the company owner. You CANNOT approve discounts, special pricing, or non-standard terms on your own.
 - If buyer asks for ANY discount, special payment terms, custom specs, or extended warranty: draft MUST say "let me check with my manager and confirm by [specific date]" — NEVER agree on the spot.
-- If buyer counter-offers a price (e.g., "can you do 10L instead of 12L?"): treat as COUNTER-OFFER. Draft acknowledges the ask, promises to check internally, gives a timeframe (24-48 hours). Tag HOT.
+- If buyer counter-offers a price: treat as COUNTER-OFFER. Draft acknowledges the ask, promises to check internally, gives a timeframe (24-48 hours). Tag HOT.
 - NEVER draft messages that commit to:
   * A specific discount percentage not already offered by the rep in chat
   * A specific price lower than what rep already quoted
   * Free add-ons, extended warranty, or bundled services the rep did not already offer
   * Payment terms beyond standard (standard = 50% advance, 50% on delivery)
-- If buyer asks "any more discount?" after rep already gave one, draft MUST say: "that's the best I can offer right now, but let me double-check with my manager and get back by [date]." — NEVER escalate the discount further.
-- If buyer accepts an offer the rep made, draft can confirm. But if buyer counters with a DIFFERENT price/term, draft must defer to manager.
+- If buyer asks "any more discount?" after rep already gave one, draft MUST say: "that's the best I can offer right now, let me double-check with my manager." — NEVER escalate the discount further.
+
+NO HALLUCINATED COMMITMENTS (CRITICAL):
+The draft is what REP WILL SAY — it must NEVER claim actions the rep hasn't actually done.
+- NEVER write "I've prepared the quote" or "I've attached" or "I've sent" or "I've spoken to"
+- INSTEAD write: "I'll prepare the quote today", "Let me put together the quote", "I'll share by [date]"
+- NEVER write "We can offer X% discount" or "We'll match that price" unless the rep ALREADY offered this in prior chat
+- INSTEAD write: "Let me check with my manager on pricing and confirm by [date]"
+- NEVER claim a document, call, or action is already done unless the chat history clearly shows it
+- The draft proposes rep ACTIONS, never claims completed ones.
 
 DATE SANITY RULES:
 - Any delivery date, meeting date, or call time you propose MUST be today or later. Never suggest past dates.
-- If buyer asked when something can be delivered, propose a realistic FUTURE date (e.g., "in 5-7 business days" or "by [specific date in the future]").
+- Propose realistic FUTURE dates (e.g., "in 5-7 business days").
 - Compare every date you write against today's date given at the top.
 
 DRAFT MESSAGE RULES:
@@ -102,7 +119,7 @@ DRAFT MESSAGE RULES:
 - Reference something specific from the last chat
 - End with a single em-dash: "—" (UI appends the rep's name)
 - Sound human. Avoid "Dear Sir", "I hope this message finds you well"
-- Action-oriented: ask for a decision or offer a specific next step
+- Action-oriented: propose next step as something REP will do
 
 OUTPUT FORMAT:
 Return ONLY a valid JSON object. No markdown, no code fences.
@@ -110,7 +127,7 @@ Return ONLY a valid JSON object. No markdown, no code fences.
 
 
 # ---------------------------------------------------------------------------
-# Rule-based fallback (no LLM — guaranteed to succeed)
+# Rule-based fallback
 # ---------------------------------------------------------------------------
 BUYING_SIGNAL_WORDS = [
     "quote", "price", "cost", "budget", "deadline", "order", "purchase",
@@ -124,15 +141,20 @@ COLD_SIGNAL_PHRASES = [
     "will reach out when", "just exploring", "already have"
 ]
 
+HARD_OPT_OUT = [
+    "do not contact", "don't contact", "dont contact", "unsubscribe",
+    "remove me", "stop contacting", "please stop", "no further contact",
+    "don't reach out", "do not reach out", "take me off"
+]
+
 DISCOUNT_WORDS = [
     "discount", "cheaper", "lower price", "better rate", "reduce",
     "negotiate", "best price", "any more", "further", "concession",
-    "bring it down", "come down", "reduce the price", "lesser price"
+    "bring it down", "come down", "lesser price"
 ]
 
 
 def _days_between(date_str: str, today: str) -> int:
-    """Return days between date_str and today. Positive if date_str is older."""
     try:
         d1 = datetime.strptime(date_str, "%Y-%m-%d").date()
         d2 = datetime.strptime(today, "%Y-%m-%d").date()
@@ -142,16 +164,11 @@ def _days_between(date_str: str, today: str) -> int:
 
 
 def _format_date(today: str, days_ahead: int) -> str:
-    """Return today + days_ahead in YYYY-MM-DD."""
     d = datetime.strptime(today, "%Y-%m-%d").date() + timedelta(days=days_ahead)
     return d.strftime("%Y-%m-%d")
 
 
 def _rule_based_analysis(lead: dict, chat: list | None, today: str) -> dict:
-    """
-    Rule-based classification that mirrors the prompt's logic.
-    Used as fallback when the LLM is unavailable. Always returns a valid result.
-    """
     source = lead.get("source", "")
     name = lead.get("name", "there")
     last_contact = lead.get("last_contact_date", today)
@@ -162,7 +179,6 @@ def _rule_based_analysis(lead: dict, chat: list | None, today: str) -> dict:
     # ===== CASE 1: No chat history =====
     if not chat:
         if source in buyer_initiated_sources:
-            # Fresh (0-2 days) — no apology
             if days_old <= 2:
                 return {
                     "tag": "Hot",
@@ -173,7 +189,6 @@ def _rule_based_analysis(lead: dict, chat: list | None, today: str) -> dict:
                         f"Can we set up a quick call today to discuss your packaging needs? —"
                     ),
                 }
-            # Dropped-ball logic
             if days_old <= 14:
                 return {
                     "tag": "Hot",
@@ -205,7 +220,6 @@ def _rule_based_analysis(lead: dict, chat: list | None, today: str) -> dict:
                     ),
                 }
         else:
-            # Rep-initiated, no response
             if days_old <= 30:
                 return {
                     "tag": "Warm",
@@ -227,14 +241,13 @@ def _rule_based_analysis(lead: dict, chat: list | None, today: str) -> dict:
                     ),
                 }
 
-    # ===== CASE 2: Chat exists — analyze signals =====
+    # ===== CASE 2: Chat exists =====
     last_msg = chat[-1]
     last_from = last_msg.get("from", "").lower()
     last_text = last_msg.get("text", "").lower()
     last_msg_date = last_msg.get("date", today)[:10]
     days_since_last_msg = _days_between(last_msg_date, today)
 
-    # Count buyer messages with buying signals
     buyer_msgs = [m for m in chat if m.get("from", "").lower() == "buyer"]
     buying_signal_count = sum(
         1 for m in buyer_msgs
@@ -242,7 +255,21 @@ def _rule_based_analysis(lead: dict, chat: list | None, today: str) -> dict:
         if word in m.get("text", "").lower()
     )
 
-    # Cold-signal check
+    # PRIORITY 1: Hard opt-out — overrides everything
+    for m in buyer_msgs:
+        text = m.get("text", "").lower()
+        if any(phrase in text for phrase in HARD_OPT_OUT):
+            return {
+                "tag": "Cold",
+                "reason": "Buyer explicitly opted out — suppressed from active queue.",
+                "next_followup_date": _format_date(today, 180),
+                "draft_message": (
+                    f"Understood, {name} — we'll remove you from our list. "
+                    f"Reach out anytime if that changes. —"
+                ),
+            }
+
+    # PRIORITY 2: Soft cold signals
     for m in buyer_msgs:
         text = m.get("text", "").lower()
         for phrase in COLD_SIGNAL_PHRASES:
@@ -271,7 +298,7 @@ def _rule_based_analysis(lead: dict, chat: list | None, today: str) -> dict:
 
     # Buyer sent last → we might owe a reply
     if last_from == "buyer":
-        # PRIORITY 1: Discount / negotiation request — defer to manager
+        # Discount request → defer to manager
         if any(w in last_text for w in DISCOUNT_WORDS):
             return {
                 "tag": "Hot",
@@ -283,7 +310,7 @@ def _rule_based_analysis(lead: dict, chat: list | None, today: str) -> dict:
                 ),
             }
 
-        # PRIORITY 2: Buyer asked a question
+        # Question → respond today
         is_question = "?" in last_text or any(
             w in last_text for w in ["what", "when", "how much", "can you", "could you", "how long"]
         )
@@ -294,11 +321,11 @@ def _rule_based_analysis(lead: dict, chat: list | None, today: str) -> dict:
                 "next_followup_date": today,
                 "draft_message": (
                     f"Hi {name}, thanks for the question. "
-                    f"Sharing the answer shortly — expect it today. —"
+                    f"Let me get you the answer today. —"
                 ),
             }
 
-        # PRIORITY 3: Specific info asks
+        # Specific asks
         specific_asks = ["spec", "detail", "quote", "price", "catalog", "brochure", "send me"]
         if any(ask in last_text for ask in specific_asks):
             return {
@@ -307,7 +334,7 @@ def _rule_based_analysis(lead: dict, chat: list | None, today: str) -> dict:
                 "next_followup_date": today,
                 "draft_message": (
                     f"Hi {name}, thanks for the specifics. "
-                    f"Sharing the details you asked for shortly — expect them today. —"
+                    f"Let me put the details together and share by end of day. —"
                 ),
             }
 
@@ -332,7 +359,6 @@ def _rule_based_analysis(lead: dict, chat: list | None, today: str) -> dict:
                 ),
             }
 
-    # Default: moderate engagement
     return {
         "tag": "Warm",
         "reason": "Conversation active, no clear urgency or disengagement.",
@@ -348,7 +374,6 @@ def _rule_based_analysis(lead: dict, chat: list | None, today: str) -> dict:
 # LLM calls
 # ---------------------------------------------------------------------------
 def _call_groq(client, model_name, user_message):
-    """Make a single Groq call. Returns raw text or raises."""
     response = client.chat.completions.create(
         model=model_name,
         messages=[
@@ -363,7 +388,6 @@ def _call_groq(client, model_name, user_message):
 
 
 def _parse_json(raw_output):
-    """Clean and parse LLM output."""
     cleaned = raw_output.strip()
     if cleaned.startswith("```"):
         cleaned = cleaned.strip("`")
@@ -380,7 +404,6 @@ def _parse_json(raw_output):
 
 
 def _validate(result):
-    """Ensure required fields exist and tag is valid."""
     required = {"tag", "reason", "next_followup_date", "draft_message"}
     if not required.issubset(result.keys()):
         raise ValueError(f"Missing fields: {required - result.keys()}")
@@ -390,23 +413,12 @@ def _validate(result):
     return result
 
 
-# ---------------------------------------------------------------------------
-# Main entry point
-# ---------------------------------------------------------------------------
 def analyze_lead(lead: dict, chat: list | None, today: str) -> dict:
-    """
-    Analyze a lead with:
-    1. LLM primary (gpt-oss-120b, then 20b)
-    2. Rule-based fallback if all LLM attempts fail
-
-    Guarantees a valid result — user never sees "agent error".
-    """
     try:
         client = get_groq_client()
     except Exception:
         return _rule_based_analysis(lead, chat, today)
 
-    # Build user message
     if chat:
         chat_text = "\n".join(
             f"[{msg['date']}] {msg['from'].upper()}: {msg['text']}"
@@ -429,7 +441,6 @@ CHAT HISTORY:
 
 Analyze this lead and return the JSON object."""
 
-    # Try LLM: 120b → 20b, with retry on 429
     models = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]
 
     for model_name in models:
@@ -443,27 +454,6 @@ Analyze this lead and return the JSON object."""
                 if "429" in err_str and attempt == 0:
                     time.sleep(6)
                     continue
-                break  # try next model
+                break
 
-    # All LLM attempts failed — rule-based fallback (always succeeds)
     return _rule_based_analysis(lead, chat, today)
-
-
-if __name__ == "__main__":
-    with open("data/leads.json") as f:
-        leads = json.load(f)
-    with open("data/chats.json") as f:
-        chats = json.load(f)
-
-    chat_by_lead = {c["lead_id"]: c["messages"] for c in chats}
-    test_lead = leads[0]
-    test_chat = chat_by_lead.get(test_lead["lead_id"])
-    today_str = datetime.now().strftime("%Y-%m-%d")
-
-    print(f"\nTesting on: {test_lead['name']}")
-    start = time.perf_counter()
-    result = analyze_lead(test_lead, test_chat, today_str)
-    elapsed = time.perf_counter() - start
-
-    print(json.dumps(result, indent=2))
-    print(f"\n⏱  {elapsed:.2f}s")

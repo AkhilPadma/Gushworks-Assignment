@@ -1,6 +1,6 @@
 """
 streamlit_app.py — PackPro Lead Follow-Up Agent
-Main UI: lead buckets, detail view, draft editing.
+Main UI: rep-centric view, buckets, detail view, draft editing.
 """
 
 import streamlit as st
@@ -28,7 +28,12 @@ db.seed_if_empty()
 TAG_EMOJI = {"Hot": "🔥", "Warm": "☀️", "Cold": "❄️"}
 TAG_COLOR = {"Hot": "#dc2626", "Warm": "#f59e0b", "Cold": "#64748b"}
 TAG_BG = {"Hot": "#fef2f2", "Warm": "#fffbeb", "Cold": "#f1f5f9"}
-REPS_FILTER = ["All reps", "Priya", "Rohit", "Anjali", "Sameer", "Vikram"]
+REPS = ["Priya", "Rohit", "Anjali", "Sameer", "Vikram"]
+REPS_FILTER = ["All reps"] + REPS
+
+# DEFAULT: rep-centric view (Priya), not All reps — matches "each rep" in brief
+if "selected_rep" not in st.session_state:
+    st.session_state["selected_rep"] = "Priya"
 
 
 def today_str():
@@ -44,7 +49,6 @@ def days_from_today(d_str: str) -> int:
 
 
 def resolve_rep_in_draft(draft: str, rep_name: str) -> str:
-    """Replace [Rep]/[rep] placeholder and ensure draft ends with em-dash + rep name."""
     if not draft:
         return draft
     out = re.sub(r"\[rep\]", rep_name, draft, flags=re.IGNORECASE)
@@ -70,7 +74,7 @@ def analyze_all_leads(force: bool = False):
         db.save_agent_result(lead["lead_id"], result)
         progress.progress(i / len(to_analyze), text=f"Analyzing {i}/{len(to_analyze)}: {lead['name']}")
         if i < len(to_analyze):
-            time.sleep(2.5)  # avoid rate limits
+            time.sleep(2.5)
     progress.empty()
     return len(to_analyze)
 
@@ -91,16 +95,57 @@ all_leads = db.get_all_leads()
 results = db.get_all_agent_results()
 today_display = datetime.now().strftime("%A, %d %b %Y")
 
-col_a, col_b, col_c = st.columns([3, 1.3, 1])
+col_a, col_b, col_c, col_d = st.columns([3, 1.3, 1.3, 1])
 with col_a:
     st.title("📦 PackPro Lead Follow-Up")
-    st.caption(f"5 sales reps · {len(all_leads)} active leads · {today_display}")
+    st.caption(f"5 sales reps · {len(all_leads)} total leads · {today_display}")
 with col_b:
     st.write("")
-    selected_rep = st.selectbox("Filter by rep", REPS_FILTER, label_visibility="collapsed")
+    selected_rep = st.selectbox(
+        "Filter by rep",
+        REPS_FILTER,
+        index=REPS_FILTER.index(st.session_state["selected_rep"]),
+        label_visibility="collapsed",
+        key="rep_selector"
+    )
+    st.session_state["selected_rep"] = selected_rep
 with col_c:
     st.write("")
-    with st.popover("🔄 Re-run analysis", use_container_width=True):
+    with st.popover("➕ Add lead", use_container_width=True):
+        st.markdown("##### Add a new lead")
+        with st.form("add_lead_form_main", clear_on_submit=True):
+            new_name = st.text_input("Name *")
+            new_company = st.text_input("Company *")
+            new_phone = st.text_input("Phone")
+            new_source = st.selectbox(
+                "Source",
+                ["WhatsApp Inquiry", "Trade Show", "Website Form", "Referral", "LinkedIn", "Cold Call"]
+            )
+            new_rep = st.selectbox("Assign to rep", REPS)
+            new_date = st.date_input("Last contact date", value=date.today())
+            new_buyer_msg = st.text_area(
+                "Buyer's first message (optional)",
+                placeholder="Paste the WhatsApp text, form submission, or trade-show note here.",
+                height=90,
+            )
+            submitted = st.form_submit_button("Add lead", use_container_width=True, type="primary")
+
+            if submitted:
+                if not new_name or not new_company:
+                    st.error("Name and Company are required.")
+                else:
+                    new_id = db.add_lead(
+                        new_name, new_company, new_phone, new_source,
+                        new_date.strftime("%Y-%m-%d"), new_rep
+                    )
+                    if new_buyer_msg and new_buyer_msg.strip():
+                        db.add_chat_message(new_id, "buyer", new_buyer_msg.strip())
+                    analyze_one(new_id)
+                    st.success(f"Added {new_name}.")
+                    st.rerun()
+with col_d:
+    st.write("")
+    with st.popover("🔄 Re-run", use_container_width=True):
         st.caption("Re-analyzes ALL leads from scratch. Takes ~2 min due to API rate limits.")
         if st.button("Yes, re-run all", type="primary", key="confirm_reanalyze"):
             n = analyze_all_leads(force=True)
@@ -110,28 +155,31 @@ with col_c:
 
 # First-time guard
 if not results:
-    st.warning(
-        "⚠️ No cached analysis found. Click '🔄 Re-run analysis' above to analyze all leads (~2 min)."
-    )
+    st.warning("⚠️ No cached analysis found. Click '🔄 Re-run' above to analyze all leads (~2 min).")
     st.stop()
 
 
 # Filter by rep
 if selected_rep == "All reps":
     leads = all_leads
+    rep_view_label = f"All reps · {len(leads)} leads"
 else:
     leads = [l for l in all_leads if l.get("assigned_rep") == selected_rep]
+    rep_view_label = f"{selected_rep}'s queue · {len(leads)} leads"
 
 
-# Bucket
-overdue, today_bucket, upcoming, later = [], [], [], []
+# Bucket (exclude opt-outs with 180+ day follow-up)
+overdue, today_bucket, upcoming, later, suppressed = [], [], [], [], []
 for lead in leads:
     r = results.get(lead["lead_id"])
     if not r:
         continue
     days = days_from_today(r["next_followup_date"])
     row = {**lead, **r, "days_from_today": days}
-    if days < 0:
+    # Opt-outs (180+ days out) → suppressed section
+    if days >= 150:
+        suppressed.append(row)
+    elif days < 0:
         overdue.append(row)
     elif days == 0:
         today_bucket.append(row)
@@ -146,46 +194,25 @@ upcoming.sort(key=lambda x: x["days_from_today"])
 later.sort(key=lambda x: x["days_from_today"])
 
 
-# Sidebar
+# Sidebar — informational only now
 with st.sidebar:
-    st.header("➕ Add new lead")
-    with st.form("add_lead_form", clear_on_submit=True):
-        new_name = st.text_input("Name *")
-        new_company = st.text_input("Company *")
-        new_phone = st.text_input("Phone")
-        new_source = st.selectbox(
-            "Source",
-            ["WhatsApp Inquiry", "Trade Show", "Website Form", "Referral", "LinkedIn", "Cold Call"]
-        )
-        new_rep = st.selectbox(
-            "Assign to rep",
-            ["Priya", "Rohit", "Anjali", "Sameer", "Vikram"]
-        )
-        new_date = st.date_input("Last contact date", value=date.today())
-        new_buyer_msg = st.text_area(
-            "Buyer's first message (optional)",
-            placeholder="Paste the WhatsApp text, form submission, or trade-show note here. Leave blank if you don't have it.",
-            height=90,
-            help="If you paste the buyer's first message, the agent will use it to tag the lead and draft a better reply."
-        )
-        submitted = st.form_submit_button("Add lead", use_container_width=True)
+    st.header("ℹ️ About")
+    st.markdown(
+        """
+        **PackPro Lead Follow-Up**
+        An AI agent that tags leads (Hot/Warm/Cold), suggests follow-up dates,
+        and drafts WhatsApp messages for your sales reps.
 
-        if submitted:
-            if not new_name or not new_company:
-                st.error("Name and Company are required.")
-            else:
-                new_id = db.add_lead(
-                    new_name, new_company, new_phone, new_source,
-                    new_date.strftime("%Y-%m-%d"), new_rep
-                )
-                if new_buyer_msg and new_buyer_msg.strip():
-                    db.add_chat_message(new_id, "buyer", new_buyer_msg.strip())
-                analyze_one(new_id)
-                st.success(f"Added {new_name} ({new_id}).")
-                st.rerun()
+        **How to use:**
+        1. Pick your name in the rep filter
+        2. Work through Overdue → Due today
+        3. Edit the draft, mark as sent
 
+        **Add new leads** via the "➕ Add lead" button at the top.
+        """
+    )
     st.divider()
-    st.caption("Built for Gushwork FDE assignment · Streamlit + Groq + SQLite")
+    st.caption("Gushwork FDE assignment · Streamlit + Groq + SQLite")
 
 
 # Lead card renderer
@@ -231,7 +258,7 @@ if "selected_lead" in st.session_state and st.session_state["selected_lead"]:
     result = db.get_agent_result(lid)
     chat = db.get_chat(lid)
 
-    # Sticky header: back button + lead name on same row
+    # Sticky header
     header_col1, header_col2 = st.columns([1, 5])
     with header_col1:
         if st.button("← Back", key="back_top", use_container_width=True):
@@ -242,9 +269,16 @@ if "selected_lead" in st.session_state and st.session_state["selected_lead"]:
             f"### {TAG_EMOJI.get(result['tag'], '•')} {lead['name']} — {lead['company']}"
         )
 
-    # Lead meta
+    # Lead meta — phone is now a tel: link
+    phone_raw = lead['phone']
+    phone_clean = re.sub(r'[^\d+]', '', phone_raw) if phone_raw else ""
+    phone_html = (
+        f"<a href='tel:{phone_clean}' style='color:#2563eb;text-decoration:none;font-weight:600'>{phone_raw}</a>"
+        if phone_clean else phone_raw
+    )
+
     m1, m2, m3, m4, m5 = st.columns(5)
-    m1.markdown(f"**Phone**  \n{lead['phone']}")
+    m1.markdown(f"**Phone**  \n{phone_html}", unsafe_allow_html=True)
     m2.markdown(f"**Source**  \n{lead['source']}")
     m3.markdown(f"**Assigned to**  \n{lead.get('assigned_rep', '?')}")
     m4.markdown(f"**Last contact**  \n{lead['last_contact_date']}")
@@ -263,7 +297,7 @@ if "selected_lead" in st.session_state and st.session_state["selected_lead"]:
 
     st.write("")
 
-    # Two columns: chat + draft
+    # Two columns
     left, right = st.columns([1, 1])
 
     with left:
@@ -338,10 +372,19 @@ if "selected_lead" in st.session_state and st.session_state["selected_lead"]:
             st.rerun()
 
 else:
-    # Main list view — buckets
+    # Main list view — rep-centric header
+    st.markdown(f"#### 👤 {rep_view_label}")
+
     render_bucket("🔴 Overdue", overdue, "Nothing overdue. Good state.")
     render_bucket("🟡 Due today", today_bucket, "No follow-ups scheduled for today.")
     render_bucket("🟢 This week", upcoming, "No follow-ups in the next 7 days.")
     st.markdown('<div class="dormant-section">', unsafe_allow_html=True)
     render_bucket("⚪ Later / dormant", later, "No dormant leads.")
     st.markdown('</div>', unsafe_allow_html=True)
+
+    # Suppressed (opt-outs) — visible for audit but out of the way
+    if suppressed:
+        with st.expander(f"🔕 Suppressed / opted-out ({len(suppressed)})"):
+            st.caption("Leads that explicitly asked not to be contacted. Not in active queue.")
+            for row in suppressed:
+                st.markdown(f"- **{row['name']}** · {row['company']} — {row['reason']}")
