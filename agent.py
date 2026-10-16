@@ -9,7 +9,6 @@ the prompt encodes. The output format is identical either way.
 
 import json
 import os
-import sys
 import time
 from datetime import datetime, timedelta
 from groq import Groq
@@ -57,9 +56,14 @@ Draft for untouched inbound:
 - 3+ days -> brief delay acknowledgment ("apologies for the delay")
 
 TAGGING RULES (when chat history EXISTS):
-- HOT: Buyer shows clear buying signals - formal quote request, price negotiation, demo agreed, budget or deadline mentioned, deep technical questions, asking for specs/details.
-- WARM: Interested but not ready - comparing vendors, asked for brochure, short vague responses.
+- HOT: Buyer shows clear buying signals - formal quote request, price negotiation, demo agreed, budget or deadline mentioned, deep technical questions, asking for specs/details/catalog/brochure.
+- WARM: Interested but not ready - comparing vendors, asked for general info, short vague responses.
 - COLD: Rep sent follow-ups, buyer did not reply, >14 days passed. OR buyer said "not interested" or "maybe next quarter."
+
+PRIORITY OVERRIDE RULES (apply BEFORE date rules):
+1. If the LATEST message is from BUYER and contains a question (ends in ?, or words like "what", "when", "how much", "can you", "could you") -> follow-up TODAY. Rep MUST answer.
+2. If the LATEST message is from BUYER and >1 day has passed with no rep response -> follow-up TODAY. Buyer is waiting.
+3. If a recent BUYER message contradicts an earlier timeline (e.g., earlier "next quarter" but recent "ready to buy") -> trust the RECENT message.
 
 FOLLOW-UP DATE RULES (today's date is provided):
 - HOT with urgency -> TODAY or TOMORROW
@@ -75,6 +79,11 @@ If rep promised ("I'll send today") and failed, draft MUST acknowledge delay ("a
 
 NEGOTIATION DETECTION:
 If buyer proposes a NEW combination the rep did NOT offer, treat as COUNTER-OFFER. Draft says "let me check and confirm by [time]" — never "thanks for confirming X." Tag HOT.
+
+DATE SANITY RULES:
+- Any delivery date, meeting date, or call time you propose MUST be today or later. Never suggest past dates.
+- If buyer asked when something can be delivered, propose a realistic FUTURE date (e.g., "in 5-7 business days" or "by [specific date in the future]").
+- Compare every date you write against today's date given at the top.
 
 DRAFT MESSAGE RULES:
 - Under 40 words, WhatsApp-friendly
@@ -210,7 +219,6 @@ def _rule_based_analysis(lead: dict, chat: list | None, today: str) -> dict:
 
     # Count buyer messages with buying signals
     buyer_msgs = [m for m in chat if m.get("from", "").lower() == "buyer"]
-    rep_msgs = [m for m in chat if m.get("from", "").lower() == "rep"]
     buying_signal_count = sum(
         1 for m in buyer_msgs
         for word in BUYING_SIGNAL_WORDS
@@ -246,7 +254,22 @@ def _rule_based_analysis(lead: dict, chat: list | None, today: str) -> dict:
 
     # Buyer sent last → we might owe a reply
     if last_from == "buyer":
-        # Check for specific asks in the latest message
+        # Priority override: buyer asked a question
+        is_question = "?" in last_text or any(
+            w in last_text for w in ["what", "when", "how much", "can you", "could you", "how long"]
+        )
+        if is_question:
+            return {
+                "tag": "Hot",
+                "reason": "Buyer asked a question — needs response today.",
+                "next_followup_date": today,
+                "draft_message": (
+                    f"Hi {name}, thanks for the question. "
+                    f"Sharing the answer shortly — expect it today. —"
+                ),
+            }
+
+        # Specific asks
         specific_asks = ["spec", "detail", "quote", "price", "catalog", "brochure", "send me"]
         if any(ask in last_text for ask in specific_asks):
             return {
@@ -348,14 +371,9 @@ def analyze_lead(lead: dict, chat: list | None, today: str) -> dict:
 
     Guarantees a valid result — user never sees "agent error".
     """
-    # Debug logging — visible in Streamlit Cloud logs
-    print(f"[AGENT] Called for lead {lead.get('name')} at {today}", file=sys.stderr)
-
     try:
         client = get_groq_client()
-        print(f"[AGENT] Groq client created OK", file=sys.stderr)
-    except Exception as e:
-        print(f"[AGENT] Groq client FAILED: {e}", file=sys.stderr)
+    except Exception:
         return _rule_based_analysis(lead, chat, today)
 
     # Build user message
@@ -387,22 +405,17 @@ Analyze this lead and return the JSON object."""
     for model_name in models:
         for attempt in range(2):
             try:
-                print(f"[AGENT] Trying {model_name} attempt {attempt+1}", file=sys.stderr)
                 raw = _call_groq(client, model_name, user_message)
-                print(f"[AGENT] {model_name} SUCCESS, got {len(raw)} chars", file=sys.stderr)
                 result = _parse_json(raw)
                 return _validate(result)
             except Exception as e:
                 err_str = str(e)
-                print(f"[AGENT] {model_name} FAILED: {err_str[:200]}", file=sys.stderr)
                 if "429" in err_str and attempt == 0:
-                    print(f"[AGENT] Rate limited, sleeping 6s", file=sys.stderr)
                     time.sleep(6)
                     continue
                 break  # try next model
 
     # All LLM attempts failed — rule-based fallback (always succeeds)
-    print(f"[AGENT] All LLM attempts failed, using rule-based fallback", file=sys.stderr)
     return _rule_based_analysis(lead, chat, today)
 
 
