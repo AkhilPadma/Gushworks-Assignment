@@ -1,153 +1,222 @@
 """
-test_groq.py — Standalone test to verify Groq API connectivity.
-Run this to check if your API key works and which models are responding.
+test_llm.py — Standalone Streamlit page to test Groq connectivity.
+
+Access this by renaming it to streamlit_app.py temporarily, OR
+by running: streamlit run test_llm.py (locally)
+
+For live deploy: go to Streamlit Cloud -> Manage app -> change main file to test_llm.py
 """
 
+import streamlit as st
 import os
-import sys
 import time
 
-print("=" * 60)
-print("GROQ CONNECTION TEST")
-print("=" * 60)
+st.set_page_config(page_title="Groq Connection Test", page_icon="🧪")
+
+st.title("🧪 Groq Connection Test")
+st.caption("Standalone diagnostic page to verify Groq API connectivity")
 
 # ---------------------------------------------------------------------------
-# Step 1: Check if API key is accessible
+# Step 1: Secret check
 # ---------------------------------------------------------------------------
-print("\n[Step 1] Looking for GROQ_API_KEY...")
+st.header("Step 1: API Key Detection")
 
 api_key = None
+source = None
 
-# Try environment variable first
-api_key = os.environ.get("GROQ_API_KEY")
+try:
+    api_key = st.secrets["GROQ_API_KEY"]
+    source = "st.secrets (Streamlit Cloud secrets panel OR .streamlit/secrets.toml)"
+except Exception as e:
+    st.warning(f"Not found in st.secrets: {e}")
+
+if not api_key:
+    api_key = os.environ.get("GROQ_API_KEY")
+    if api_key:
+        source = "environment variable"
+
 if api_key:
-    print(f"✅ Found in environment variable")
+    masked = api_key[:8] + "..." + api_key[-4:] if len(api_key) > 12 else "***"
+    st.success(f"✅ Found API key from **{source}**")
+    st.code(f"Key: {masked}\nLength: {len(api_key)} chars")
 else:
-    print("   Not in environment variable, trying secrets.toml...")
-
-# Try secrets.toml
-if not api_key:
-    try:
-        import toml
-        secrets = toml.load(".streamlit/secrets.toml")
-        api_key = secrets.get("GROQ_API_KEY")
-        if api_key:
-            print(f"✅ Found in .streamlit/secrets.toml")
-    except FileNotFoundError:
-        print("   .streamlit/secrets.toml not found")
-    except ImportError:
-        print("   toml package not installed, installing...")
-        os.system("pip install toml --quiet")
-        import toml
-        secrets = toml.load(".streamlit/secrets.toml")
-        api_key = secrets.get("GROQ_API_KEY")
-
-if not api_key:
-    print("\n❌ FAIL: Could not find GROQ_API_KEY anywhere.")
-    print("   Set it as environment variable OR add to .streamlit/secrets.toml")
-    sys.exit(1)
-
-# Mask the key for display
-masked = api_key[:8] + "..." + api_key[-4:] if len(api_key) > 12 else "***"
-print(f"   Key: {masked}")
-print(f"   Length: {len(api_key)} chars")
+    st.error("❌ No GROQ_API_KEY found anywhere. Add it to Streamlit Cloud secrets.")
+    st.stop()
 
 # ---------------------------------------------------------------------------
-# Step 2: Import Groq SDK
+# Step 2: Groq SDK import
 # ---------------------------------------------------------------------------
-print("\n[Step 2] Importing Groq SDK...")
+st.header("Step 2: Groq SDK")
+
 try:
     from groq import Groq
-    print("✅ Groq SDK imported")
+    st.success("✅ Groq SDK imported")
 except ImportError as e:
-    print(f"❌ FAIL: {e}")
-    print("   Run: pip install groq")
-    sys.exit(1)
+    st.error(f"❌ Import failed: {e}")
+    st.stop()
 
 # ---------------------------------------------------------------------------
-# Step 3: Create client
+# Step 3: Client creation
 # ---------------------------------------------------------------------------
-print("\n[Step 3] Creating Groq client...")
+st.header("Step 3: Create Client")
+
 try:
     client = Groq(api_key=api_key)
-    print("✅ Client created")
+    st.success("✅ Client created")
 except Exception as e:
-    print(f"❌ FAIL: {e}")
-    sys.exit(1)
+    st.error(f"❌ Client creation failed: {e}")
+    st.stop()
 
 # ---------------------------------------------------------------------------
-# Step 4: List available models
+# Step 4: List models button
 # ---------------------------------------------------------------------------
-print("\n[Step 4] Listing available models on your account...")
-try:
-    models = client.models.list()
-    print(f"✅ Got {len(models.data)} models:")
-    for m in models.data:
-        print(f"   - {m.id}")
-except Exception as e:
-    print(f"❌ FAIL: {e}")
-    sys.exit(1)
+st.header("Step 4: List Available Models")
 
-# ---------------------------------------------------------------------------
-# Step 5: Test simple call on each model we care about
-# ---------------------------------------------------------------------------
-test_models = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]
-
-for model_name in test_models:
-    print(f"\n[Step 5] Testing {model_name}...")
+if st.button("🔍 List models on this account"):
     try:
-        start = time.perf_counter()
-        response = client.chat.completions.create(
-            model=model_name,
-            messages=[
-                {"role": "user", "content": "Reply with just the word: hello"}
-            ],
-            max_tokens=10,
-        )
-        elapsed = time.perf_counter() - start
-        reply = response.choices[0].message.content.strip()
-        print(f"✅ {model_name} responded in {elapsed:.2f}s")
-        print(f"   Reply: '{reply}'")
+        models = client.models.list()
+        st.success(f"✅ Account has {len(models.data)} models:")
+        for m in models.data:
+            st.write(f"- `{m.id}`")
     except Exception as e:
-        err_str = str(e)
-        if "429" in err_str:
-            print(f"⚠️  {model_name}: RATE LIMITED (429)")
-            print(f"   Wait a minute and retry, or upgrade tier")
-        elif "401" in err_str:
-            print(f"❌ {model_name}: UNAUTHORIZED (401) — bad API key")
-        elif "404" in err_str:
-            print(f"❌ {model_name}: MODEL NOT FOUND (404) — model may be deprecated")
-        else:
-            print(f"❌ {model_name}: {err_str[:200]}")
+        st.error(f"❌ Failed to list: {str(e)[:300]}")
 
 # ---------------------------------------------------------------------------
-# Step 6: Test JSON mode (what the agent actually uses)
+# Step 5: Simple ping test
 # ---------------------------------------------------------------------------
-print(f"\n[Step 6] Testing JSON mode on openai/gpt-oss-20b...")
-try:
-    start = time.perf_counter()
-    response = client.chat.completions.create(
-        model="openai/gpt-oss-20b",
-        messages=[
-            {
-                "role": "user",
-                "content": 'Return a JSON object with a single key "status" and value "ok". No other text.'
-            }
-        ],
-        response_format={"type": "json_object"},
-        max_tokens=50,
-    )
-    elapsed = time.perf_counter() - start
-    reply = response.choices[0].message.content
-    print(f"✅ JSON mode works in {elapsed:.2f}s")
-    print(f"   Response: {reply}")
+st.header("Step 5: Ping Test")
+st.caption("Sends a 'say hello' prompt and measures response time")
 
-    import json
-    parsed = json.loads(reply)
-    print(f"   Parsed OK: {parsed}")
-except Exception as e:
-    print(f"❌ JSON mode failed: {str(e)[:200]}")
+col1, col2 = st.columns(2)
 
-print("\n" + "=" * 60)
-print("TEST COMPLETE")
-print("=" * 60)
+with col1:
+    if st.button("Test gpt-oss-120b", use_container_width=True):
+        with st.spinner("Calling 120b..."):
+            try:
+                start = time.perf_counter()
+                response = client.chat.completions.create(
+                    model="openai/gpt-oss-120b",
+                    messages=[{"role": "user", "content": "Reply with just: hello"}],
+                    max_tokens=10,
+                )
+                elapsed = time.perf_counter() - start
+                reply = response.choices[0].message.content.strip()
+                st.success(f"✅ 120b: {elapsed:.2f}s")
+                st.code(f"Response: {reply}")
+            except Exception as e:
+                err = str(e)
+                if "429" in err:
+                    st.warning("⚠️ 120b: RATE LIMITED (429) — wait 1 min")
+                elif "401" in err:
+                    st.error("❌ 120b: UNAUTHORIZED (401) — bad API key")
+                elif "404" in err:
+                    st.error("❌ 120b: MODEL NOT FOUND (404)")
+                else:
+                    st.error(f"❌ 120b: {err[:200]}")
+
+with col2:
+    if st.button("Test gpt-oss-20b", use_container_width=True):
+        with st.spinner("Calling 20b..."):
+            try:
+                start = time.perf_counter()
+                response = client.chat.completions.create(
+                    model="openai/gpt-oss-20b",
+                    messages=[{"role": "user", "content": "Reply with just: hello"}],
+                    max_tokens=10,
+                )
+                elapsed = time.perf_counter() - start
+                reply = response.choices[0].message.content.strip()
+                st.success(f"✅ 20b: {elapsed:.2f}s")
+                st.code(f"Response: {reply}")
+            except Exception as e:
+                err = str(e)
+                if "429" in err:
+                    st.warning("⚠️ 20b: RATE LIMITED (429) — wait 1 min")
+                elif "401" in err:
+                    st.error("❌ 20b: UNAUTHORIZED (401) — bad API key")
+                elif "404" in err:
+                    st.error("❌ 20b: MODEL NOT FOUND (404)")
+                else:
+                    st.error(f"❌ 20b: {err[:200]}")
+
+# ---------------------------------------------------------------------------
+# Step 6: JSON mode test (what the real agent uses)
+# ---------------------------------------------------------------------------
+st.header("Step 6: JSON Mode Test")
+st.caption("This is what the real agent uses — if this fails, the agent will fall back to rules")
+
+if st.button("🧪 Test JSON mode on gpt-oss-20b"):
+    with st.spinner("Testing JSON mode..."):
+        try:
+            start = time.perf_counter()
+            response = client.chat.completions.create(
+                model="openai/gpt-oss-20b",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": 'Return a JSON with a single key "status" and value "ok". No other text.'
+                    }
+                ],
+                response_format={"type": "json_object"},
+                max_tokens=50,
+            )
+            elapsed = time.perf_counter() - start
+            reply = response.choices[0].message.content
+            st.success(f"✅ JSON mode works: {elapsed:.2f}s")
+            st.code(reply)
+
+            import json
+            parsed = json.loads(reply)
+            st.write("Parsed:", parsed)
+        except Exception as e:
+            st.error(f"❌ JSON mode failed: {str(e)[:300]}")
+
+# ---------------------------------------------------------------------------
+# Step 7: Full agent simulation
+# ---------------------------------------------------------------------------
+st.header("Step 7: Real Agent Simulation")
+st.caption("Simulates the EXACT call the lead-analyzer agent makes")
+
+if st.button("🤖 Test with realistic agent prompt"):
+    system_prompt = """You are a B2B sales analyst. Analyze the lead and return JSON with:
+- tag (Hot/Warm/Cold)
+- reason (one sentence)
+- next_followup_date (YYYY-MM-DD)
+- draft_message (under 40 words)
+Return ONLY the JSON object."""
+
+    user_prompt = """TODAY: 2026-10-16
+
+LEAD: Test Customer at Test Co
+Source: WhatsApp Inquiry
+Last contact: 2026-10-16
+
+CHAT:
+[2026-10-16 10:00] BUYER: Hi, need pouch filling machine urgently. Budget 15L."""
+
+    with st.spinner("Running full agent simulation..."):
+        try:
+            start = time.perf_counter()
+            response = client.chat.completions.create(
+                model="openai/gpt-oss-20b",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.3,
+                response_format={"type": "json_object"},
+                max_tokens=500,
+            )
+            elapsed = time.perf_counter() - start
+            reply = response.choices[0].message.content
+            st.success(f"✅ Agent-style call works: {elapsed:.2f}s")
+
+            import json
+            parsed = json.loads(reply)
+            st.json(parsed)
+        except Exception as e:
+            st.error(f"❌ Agent call failed: {str(e)[:300]}")
+
+st.divider()
+st.caption("If all 7 steps pass, Groq is working. The problem is elsewhere (caching, UI).")
+st.caption("If any step fails, that error tells you exactly what to fix.")
