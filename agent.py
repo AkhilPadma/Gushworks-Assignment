@@ -60,6 +60,29 @@ TAGGING RULES (when chat history EXISTS):
 - WARM: Interested but not ready - comparing vendors, asked for general info, short vague responses.
 - COLD: Rep sent follow-ups, buyer did not reply, >14 days passed. OR buyer said "not interested" or "maybe next quarter."
 
+HOT vs WARM — strict distinction for inbound leads:
+
+A fresh inbound buyer message is HOT only if it includes at least ONE of:
+- Specific product/model named ("MPF-50C", "semi-automatic line")
+- Quantity ("500 units", "10 machines", any number)
+- Budget ("25 lakh", "under 10L", any monetary figure)
+- Deadline ("by Friday", "end of month", "urgent", "ASAP", "this week")
+- Explicit buying intent ("want to order", "need quote", "ready to buy")
+
+Vague inbound inquiries without ANY concrete signal are WARM:
+- "share catalog" → WARM
+- "tell me about machines" → WARM
+- "we're exploring options" → WARM
+- "HI" → WARM (greeting only, no signal)
+- "interested" without specifics → WARM
+
+DEAL LOST — explicit COLD signal:
+If buyer says any of: "dropping off", "got another deal", "went with another vendor",
+"not proceeding", "deal is off" → COLD with reason "Buyer lost to competitor",
+follow-up pushed +90 days.
+
+DROPPED-BALL rule still applies: buyer waiting 3+ days → upgrade to HOT with apology.
+
 HARD OPT-OUT DETECTION (HIGHEST PRIORITY):
 If buyer says "do not contact", "don't contact", "unsubscribe", "remove me", "stop contacting", "please stop", "no further contact", or any clear opt-out:
 - Tag: COLD
