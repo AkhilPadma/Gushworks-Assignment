@@ -16,6 +16,7 @@ st.set_page_config(
     page_title="PackPro Lead Follow-Up",
     page_icon="📦",
     layout="wide",
+    initial_sidebar_state="collapsed",
 )
 inject_custom_css()
 
