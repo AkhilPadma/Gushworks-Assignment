@@ -1,14 +1,23 @@
 """
 db.py — SQLite database layer for the lead follow-up app.
+Uses IST (Asia/Kolkata) for all timestamps.
 """
 
 import json
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 DB_PATH = "app.db"
 REPS = ["Priya", "Rohit", "Anjali", "Sameer", "Vikram"]
+
+# India Standard Time
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def now_ist():
+    """Return current time in IST."""
+    return datetime.now(IST)
 
 
 def get_conn():
@@ -73,58 +82,55 @@ def init_db():
 
 
 def seed_if_empty():
-    """Load leads.json + chats.json into DB. Also backfills missing reps for existing leads."""
+    """Seed leads and chats from JSON files if DB is empty."""
     conn = get_conn()
     cur = conn.cursor()
-
     cur.execute("SELECT COUNT(*) FROM leads")
-    lead_count = cur.fetchone()[0]
+    if cur.fetchone()[0] > 0:
+        conn.close()
+        return
 
-    if lead_count == 0:
-        # Fresh DB — seed from JSON
-        with open("data/leads.json") as f:
-            leads = json.load(f)
-        with open("data/chats.json") as f:
-            chats = json.load(f)
+    leads_file = Path("data/leads.json")
+    chats_file = Path("data/chats.json")
 
-        for i, lead in enumerate(leads):
-            assigned = REPS[i % len(REPS)]
+    if not leads_file.exists() or not chats_file.exists():
+        conn.close()
+        return
+
+    with open(leads_file) as f:
+        leads = json.load(f)
+    with open(chats_file) as f:
+        chats = json.load(f)
+
+    # Round-robin rep assignment
+    for i, lead in enumerate(leads):
+        assigned = REPS[i % len(REPS)]
+        cur.execute(
+            "INSERT INTO leads (lead_id, name, company, phone, source, last_contact_date, assigned_rep) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (lead["lead_id"], lead["name"], lead["company"], lead["phone"],
+             lead["source"], lead["last_contact_date"], assigned)
+        )
+
+    for chat in chats:
+        for msg in chat["messages"]:
             cur.execute(
-                """INSERT INTO leads (lead_id, name, company, phone, source, last_contact_date, assigned_rep)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (lead["lead_id"], lead["name"], lead["company"],
-                 lead["phone"], lead["source"], lead["last_contact_date"], assigned)
-            )
-
-        for chat in chats:
-            for msg in chat["messages"]:
-                cur.execute(
-                    """INSERT INTO chats (lead_id, from_who, msg_date, text)
-                       VALUES (?, ?, ?, ?)""",
-                    (chat["lead_id"], msg["from"], msg["date"], msg["text"])
-                )
-    else:
-        # Existing DB — backfill missing reps if migration left them NULL/default
-        cur.execute("SELECT lead_id FROM leads WHERE assigned_rep IS NULL OR assigned_rep = '' ORDER BY lead_id")
-        missing = [row[0] for row in cur.fetchall()]
-        for i, lead_id in enumerate(missing):
-            cur.execute(
-                "UPDATE leads SET assigned_rep = ? WHERE lead_id = ?",
-                (REPS[i % len(REPS)], lead_id)
+                "INSERT INTO chats (lead_id, from_who, msg_date, text) VALUES (?, ?, ?, ?)",
+                (chat["lead_id"], msg["from"], msg["date"], msg["text"])
             )
 
     conn.commit()
     conn.close()
 
 
-def get_all_leads():
+def get_all_leads() -> list[dict]:
     conn = get_conn()
-    rows = conn.execute("SELECT * FROM leads ORDER BY lead_id").fetchall()
+    rows = conn.execute("SELECT * FROM leads").fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
 
-def get_lead(lead_id: str):
+def get_lead(lead_id: str) -> dict | None:
     conn = get_conn()
     row = conn.execute("SELECT * FROM leads WHERE lead_id = ?", (lead_id,)).fetchone()
     conn.close()
@@ -132,32 +138,27 @@ def get_lead(lead_id: str):
 
 
 def add_lead(name: str, company: str, phone: str, source: str,
-             last_contact_date: str, assigned_rep: str = "Priya"):
+             last_contact: str, assigned_rep: str) -> str:
+    """Add a new lead. Auto-generates lead_id as L<next_num>."""
     conn = get_conn()
     cur = conn.cursor()
-
-    cur.execute("SELECT lead_id FROM leads ORDER BY lead_id DESC LIMIT 1")
-    last = cur.fetchone()
-    if last:
-        last_num = int(last["lead_id"][1:])
-        new_id = f"L{last_num + 1:03d}"
-    else:
-        new_id = "L001"
-
+    cur.execute("SELECT COUNT(*) FROM leads")
+    n = cur.fetchone()[0] + 1
+    new_id = f"L{n:03d}"
     cur.execute(
-        """INSERT INTO leads (lead_id, name, company, phone, source, last_contact_date, assigned_rep)
-           VALUES (?, ?, ?, ?, ?, ?, ?)""",
-        (new_id, name, company, phone, source, last_contact_date, assigned_rep)
+        "INSERT INTO leads (lead_id, name, company, phone, source, last_contact_date, assigned_rep) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (new_id, name, company, phone, source, last_contact, assigned_rep)
     )
     conn.commit()
     conn.close()
     return new_id
 
 
-def get_chat(lead_id: str):
+def get_chat(lead_id: str) -> list[dict]:
     conn = get_conn()
     rows = conn.execute(
-        "SELECT from_who, msg_date, text FROM chats WHERE lead_id = ? ORDER BY msg_date ASC",
+        "SELECT from_who, msg_date, text FROM chats WHERE lead_id = ? ORDER BY chat_id",
         (lead_id,)
     ).fetchall()
     conn.close()
@@ -165,12 +166,14 @@ def get_chat(lead_id: str):
 
 
 def add_chat_message(lead_id: str, from_who: str, text: str):
+    """Add a chat message with IST timestamp."""
     conn = get_conn()
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    now = now_ist().strftime("%Y-%m-%d %H:%M")
     conn.execute(
         "INSERT INTO chats (lead_id, from_who, msg_date, text) VALUES (?, ?, ?, ?)",
         (lead_id, from_who, now, text)
     )
+    # Update lead's last_contact_date
     conn.execute(
         "UPDATE leads SET last_contact_date = ? WHERE lead_id = ?",
         (now[:10], lead_id)
@@ -180,20 +183,21 @@ def add_chat_message(lead_id: str, from_who: str, text: str):
 
 
 def save_agent_result(lead_id: str, result: dict):
+    """Save or update agent analysis result."""
     conn = get_conn()
     conn.execute(
-        """INSERT OR REPLACE INTO agent_results
-           (lead_id, tag, reason, next_followup_date, draft_message, analyzed_at)
-           VALUES (?, ?, ?, ?, ?, ?)""",
+        "INSERT OR REPLACE INTO agent_results "
+        "(lead_id, tag, reason, next_followup_date, draft_message, analyzed_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
         (lead_id, result["tag"], result["reason"],
          result["next_followup_date"], result["draft_message"],
-         datetime.now().isoformat())
+         now_ist().isoformat())
     )
     conn.commit()
     conn.close()
 
 
-def get_agent_result(lead_id: str):
+def get_agent_result(lead_id: str) -> dict | None:
     conn = get_conn()
     row = conn.execute(
         "SELECT * FROM agent_results WHERE lead_id = ?", (lead_id,)
@@ -202,7 +206,7 @@ def get_agent_result(lead_id: str):
     return dict(row) if row else None
 
 
-def get_all_agent_results():
+def get_all_agent_results() -> dict:
     conn = get_conn()
     rows = conn.execute("SELECT * FROM agent_results").fetchall()
     conn.close()
@@ -220,12 +224,14 @@ def update_draft(lead_id: str, new_draft: str):
 
 
 def mark_sent(lead_id: str, message_text: str):
+    """Log a sent message with IST timestamp."""
     conn = get_conn()
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    now = now_ist().strftime("%Y-%m-%d %H:%M")
     conn.execute(
         "INSERT INTO sent_log (lead_id, message_text, sent_at) VALUES (?, ?, ?)",
         (lead_id, message_text, now)
     )
+    # Also add it to chat as a rep message
     conn.execute(
         "INSERT INTO chats (lead_id, from_who, msg_date, text) VALUES (?, ?, ?, ?)",
         (lead_id, "rep", now, message_text)
@@ -238,29 +244,13 @@ def mark_sent(lead_id: str, message_text: str):
     conn.close()
 
 
-def is_sent_today(lead_id: str):
+def is_sent_today(lead_id: str) -> bool:
+    """Check if any message was marked sent to this lead today (IST)."""
     conn = get_conn()
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = now_ist().strftime("%Y-%m-%d")
     row = conn.execute(
-        "SELECT 1 FROM sent_log WHERE lead_id = ? AND sent_at LIKE ?",
+        "SELECT COUNT(*) FROM sent_log WHERE lead_id = ? AND sent_at LIKE ?",
         (lead_id, f"{today}%")
     ).fetchone()
     conn.close()
-    return row is not None
-
-
-def reset_db():
-    Path(DB_PATH).unlink(missing_ok=True)
-
-
-if __name__ == "__main__":
-    print("Initializing database...")
-    init_db()
-    print("Seeding from JSON (if empty)...")
-    seed_if_empty()
-
-    leads = get_all_leads()
-    print(f"\nLoaded {len(leads)} leads.")
-    if leads:
-        print(f"First lead: {leads[0]['name']} -> rep: {leads[0].get('assigned_rep')}")
-    print("Database ready.")
+    return row[0] > 0
