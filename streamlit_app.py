@@ -1,6 +1,6 @@
 """
 streamlit_app.py — PackPro Lead Follow-Up Agent
-Main UI: rep-centric view, buckets, detail view, draft editing.
+Main UI: rep-centric view, buckets, detail view with unified reply panel.
 """
 
 import streamlit as st
@@ -16,7 +16,6 @@ st.set_page_config(
     page_title="PackPro Lead Follow-Up",
     page_icon="📦",
     layout="wide",
-    initial_sidebar_state="collapsed",
 )
 inject_custom_css()
 
@@ -32,7 +31,6 @@ TAG_BG = {"Hot": "#fef2f2", "Warm": "#fffbeb", "Cold": "#f1f5f9"}
 REPS = ["Priya", "Rohit", "Anjali", "Sameer", "Vikram"]
 REPS_FILTER = ["All reps"] + REPS
 
-# DEFAULT: rep-centric view (Priya), not All reps — matches "each rep" in brief
 if "selected_rep" not in st.session_state:
     st.session_state["selected_rep"] = "Priya"
 
@@ -154,10 +152,12 @@ with col_d:
             st.rerun()
 
 
-# First-time guard
+# First-time guard — auto-run if cache empty
 if not results:
-    st.warning("⚠️ No cached analysis found. Click '🔄 Re-run' above to analyze all leads (~2 min).")
-    st.stop()
+    st.info("🔄 First-time setup: analyzing all leads. Takes ~2 minutes and only happens once.")
+    n = analyze_all_leads(force=False)
+    st.success(f"Analyzed {n} leads. Refreshing...")
+    st.rerun()
 
 
 # Filter by rep
@@ -169,7 +169,7 @@ else:
     rep_view_label = f"{selected_rep}'s queue · {len(leads)} leads"
 
 
-# Bucket (exclude opt-outs with 180+ day follow-up)
+# Bucket
 overdue, today_bucket, upcoming, later, suppressed = [], [], [], [], []
 for lead in leads:
     r = results.get(lead["lead_id"])
@@ -177,7 +177,6 @@ for lead in leads:
         continue
     days = days_from_today(r["next_followup_date"])
     row = {**lead, **r, "days_from_today": days}
-    # Opt-outs (180+ days out) → suppressed section
     if days >= 150:
         suppressed.append(row)
     elif days < 0:
@@ -195,7 +194,7 @@ upcoming.sort(key=lambda x: x["days_from_today"])
 later.sort(key=lambda x: x["days_from_today"])
 
 
-# Sidebar — informational only now
+# Sidebar
 with st.sidebar:
     st.header("ℹ️ About")
     st.markdown(
@@ -207,7 +206,7 @@ with st.sidebar:
         **How to use:**
         1. Pick your name in the rep filter
         2. Work through Overdue → Due today
-        3. Edit the draft, mark as sent
+        3. Open a lead, review the AI's draft, mark as sent
 
         **Add new leads** via the "➕ Add lead" button at the top.
         """
@@ -247,6 +246,10 @@ def render_bucket(title: str, rows: list, empty_msg: str):
             with c3:
                 if st.button("Open", key=f"open_{row['lead_id']}", use_container_width=True):
                     st.session_state["selected_lead"] = row["lead_id"]
+                    # Clear any reply-mode state from previous lead
+                    for k in list(st.session_state.keys()):
+                        if k.startswith("reply_mode_") or k.startswith("reply_text_"):
+                            del st.session_state[k]
                     st.rerun()
 
 
@@ -259,7 +262,7 @@ if "selected_lead" in st.session_state and st.session_state["selected_lead"]:
     result = db.get_agent_result(lid)
     chat = db.get_chat(lid)
 
-    # Sticky header
+    # Sticky back + title
     header_col1, header_col2 = st.columns([1, 5])
     with header_col1:
         if st.button("← Back", key="back_top", use_container_width=True):
@@ -270,7 +273,7 @@ if "selected_lead" in st.session_state and st.session_state["selected_lead"]:
             f"### {TAG_EMOJI.get(result['tag'], '•')} {lead['name']} — {lead['company']}"
         )
 
-    # Lead meta — phone is now a tel: link
+    # Meta — phone as tel: link
     phone_raw = lead['phone']
     phone_clean = re.sub(r'[^\d+]', '', phone_raw) if phone_raw else ""
     phone_html = (
@@ -298,7 +301,7 @@ if "selected_lead" in st.session_state and st.session_state["selected_lead"]:
 
     st.write("")
 
-    # Two columns
+    # Two columns: chat on left, unified reply panel on right
     left, right = st.columns([1, 1])
 
     with left:
@@ -324,56 +327,82 @@ if "selected_lead" in st.session_state and st.session_state["selected_lead"]:
         else:
             st.info("No chat history yet. The agent tagged this based on source and last contact age.")
 
-        st.markdown("##### Add a message")
-        with st.form(f"add_msg_{lid}", clear_on_submit=True):
-            who = st.selectbox("From", ["buyer", "rep"], key=f"who_{lid}")
-            text = st.text_area("Message", key=f"text_{lid}", height=70)
-            if st.form_submit_button("Add & re-analyze"):
-                if text.strip():
-                    db.add_chat_message(lid, who, text.strip())
-                    analyze_one(lid)
-                    st.rerun()
-
     with right:
-        st.markdown("#### ✉️ Draft follow-up message")
+        st.markdown("#### ✉️ Reply")
 
-        rep_name = lead.get("assigned_rep", "the team")
-        draft_display = resolve_rep_in_draft(result["draft_message"], rep_name)
+        # Mode toggle — resets textarea on change
+        mode_key = f"reply_mode_{lid}"
+        if mode_key not in st.session_state:
+            st.session_state[mode_key] = "I'm the rep"
 
-        analyzed_at = result.get("analyzed_at", "")
-        edited = st.text_area(
-            "Edit before sending",
-            value=draft_display,
-            height=160,
-            key=f"draft_{lid}_{analyzed_at}",
+        mode = st.radio(
+            "Who's replying?",
+            ["I'm the rep", "I'm the buyer"],
+            horizontal=True,
+            key=mode_key,
+            label_visibility="collapsed"
         )
 
-        b1, b2 = st.columns(2)
-        with b1:
-            if st.button("💾 Save edit", use_container_width=True, key=f"save_{lid}"):
-                db.update_draft(lid, edited)
-                st.success("Draft saved.")
-                st.rerun()
-        with b2:
-            already_sent = db.is_sent_today(lid)
-            send_label = "📤 Send again" if already_sent else "📤 Mark as sent"
-            if st.button(send_label, use_container_width=True, key=f"send_{lid}", type="primary"):
-                recent_reps = [m for m in chat if m['from'] == 'rep'][-3:]
-                if recent_reps and any(m['text'].strip() == edited.strip() for m in recent_reps):
-                    st.warning("Same message was just sent to this lead. Edit before resending.")
-                else:
-                    db.mark_sent(lid, edited)
-                    st.success(f"Marked as sent to {lead['name']}.")
-                    st.rerun()
-            if already_sent:
-                st.caption("✓ Already sent to this lead today")
+        rep_name = lead.get("assigned_rep", "the team")
 
-        if st.button("🔄 Re-analyze this lead", use_container_width=True, key=f"reanalyze_{lid}"):
-            analyze_one(lid)
-            st.rerun()
+        if mode == "I'm the rep":
+            # Show AI draft, editable
+            draft_display = resolve_rep_in_draft(result["draft_message"], rep_name)
+            analyzed_at = result.get("analyzed_at", "")
+
+            edited = st.text_area(
+                "AI-generated draft (edit if needed)",
+                value=draft_display,
+                height=160,
+                key=f"draft_rep_{lid}_{analyzed_at}",
+            )
+
+            b1, b2 = st.columns(2)
+            with b1:
+                if st.button("💾 Save edit", use_container_width=True, key=f"save_{lid}"):
+                    db.update_draft(lid, edited)
+                    st.success("Draft saved.")
+                    st.rerun()
+            with b2:
+                already_sent = db.is_sent_today(lid)
+                send_label = "📤 Send again" if already_sent else "📤 Mark as sent"
+                if st.button(send_label, use_container_width=True, key=f"send_{lid}", type="primary"):
+                    recent_reps = [m for m in chat if m['from'] == 'rep'][-3:]
+                    if recent_reps and any(m['text'].strip() == edited.strip() for m in recent_reps):
+                        st.warning("Same message was just sent. Edit before resending.")
+                    else:
+                        db.mark_sent(lid, edited)
+                        st.success(f"Marked as sent to {lead['name']}.")
+                        st.rerun()
+                if already_sent:
+                    st.caption("✓ Already sent to this lead today")
+
+            if st.button("🔄 Re-analyze this lead", use_container_width=True, key=f"reanalyze_{lid}"):
+                analyze_one(lid)
+                st.rerun()
+
+        else:  # I'm the buyer
+            buyer_text = st.text_area(
+                "Type the buyer's message",
+                value="",
+                height=160,
+                placeholder="E.g. 'Can you share the quote by Friday?' or 'Not interested right now.'",
+                key=f"buyer_text_{lid}",
+            )
+
+            if st.button("Send buyer message & re-analyze",
+                         use_container_width=True,
+                         type="primary",
+                         key=f"buyer_send_{lid}"):
+                if buyer_text.strip():
+                    db.add_chat_message(lid, "buyer", buyer_text.strip())
+                    analyze_one(lid)
+                    st.rerun()
+                else:
+                    st.warning("Message cannot be empty.")
 
 else:
-    # Main list view — rep-centric header
+    # Main list view
     st.markdown(f"#### 👤 {rep_view_label}")
 
     render_bucket("🔴 Overdue", overdue, "Nothing overdue. Good state.")
@@ -383,7 +412,6 @@ else:
     render_bucket("⚪ Later / dormant", later, "No dormant leads.")
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Suppressed (opt-outs) — visible for audit but out of the way
     if suppressed:
         with st.expander(f"🔕 Suppressed / opted-out ({len(suppressed)})"):
             st.caption("Leads that explicitly asked not to be contacted. Not in active queue.")
